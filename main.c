@@ -8,7 +8,6 @@ void analisarArquivo(FILE* arquivo) {
     int aux_sintitico = 0;
 
     while (fgets(linha, sizeof(linha), arquivo)) {
-        // analisarLinha(linha, num_linha);
         lexico(linha, num_linha);
         // sintatico(&aux_sintitico);
         num_linha++;
@@ -30,7 +29,7 @@ int main() {
         return 1;
     }
 
-    // analisarArquivo(arquivo);
+    analisarArquivo(arquivo);
 
     fclose(arquivo);
 

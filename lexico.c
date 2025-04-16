@@ -1,8 +1,7 @@
 #include "lexico.h"
 
 tabelaReservados[] = {
-    {"CALL","simbolo_CALL"},
-    {"PROGRAM", "PROGRAM"},
+    {"CALL","simb_CALL"},
     {"VAR", "VAR"},
     {"BEGIN", "BEGIN"},
     {"END", "END"},
@@ -20,6 +19,10 @@ tabelaReservados[] = {
 operadores[] = {
     ";", ":", "+", "-", "*", "/", "(", ")", "=", ",", ">", "<", "."
 };
+
+void isDelimiter(){
+
+}
 //adiciona os tokens que coletamos a tabela com sua tipagem e tudo mais
 int addToken(){
 
@@ -34,6 +37,14 @@ void automatoIdentificador(){
 }
 //identifica boa formação de numeros inteiros ou reais
 void automatoNumero(){
+
+}
+
+void automatoParenteses(){
+
+}
+
+void automatoComentario(){
 
 }
 
