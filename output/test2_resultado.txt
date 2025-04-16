@@ -1,0 +1,271 @@
+Digite o nome do arquivo: DEBUG: Abrindo arquivo: 'tests/test2.txt'
+DEBUG: Iniciando análise do arquivo
+DEBUG: Lendo linha 1
+
+DEBUG: Analisando linha 1: 'VAR a,b,c; 
+'
+DEBUG: Caractere atual: 'V' (posição 0)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'A' (posição 1)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'R' (posição 2)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 3)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: 'a' (posição 4)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ',' (posição 5)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=',', token='simbolo_virgula', linha=1
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'b' (posição 6)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ',' (posição 7)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=',', token='simbolo_virgula', linha=1
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'c' (posição 8)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ';' (posição 9)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=';', token='simbolo_ponto_virgula', linha=1
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 10)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: '
+' (posição 11)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 1
+DEBUG: Lendo linha 2
+
+DEBUG: Analisando linha 2: 'BEGIN 
+'
+DEBUG: Caractere atual: 'B' (posição 0)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'E' (posição 1)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'G' (posição 2)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'I' (posição 3)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'N' (posição 4)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 5)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: '
+' (posição 6)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 2
+DEBUG: Lendo linha 3
+
+DEBUG: Analisando linha 3: '    a:=2; 
+'
+DEBUG: Caractere atual: ' ' (posição 0)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 1)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 2)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 3)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: 'a' (posição 4)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ':' (posição 5)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=':=', token='simbolo_atribuicao', linha=3
+DEBUG: Avançando 2 posições
+DEBUG: Caractere atual: '2' (posição 7)
+DEBUG: Caractere é um dígito
+DEBUG: Implementação básica de número adicionada
+DEBUG: Adicionando token: lexema='2', token='numero', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ';' (posição 8)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=';', token='simbolo_ponto_virgula', linha=3
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 9)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: '
+' (posição 10)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 3
+DEBUG: Lendo linha 4
+
+DEBUG: Analisando linha 4: '    b:=3; 
+'
+DEBUG: Caractere atual: ' ' (posição 0)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 1)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 2)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 3)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: 'b' (posição 4)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ':' (posição 5)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=':=', token='simbolo_atribuicao', linha=4
+DEBUG: Avançando 2 posições
+DEBUG: Caractere atual: '3' (posição 7)
+DEBUG: Caractere é um dígito
+DEBUG: Implementação básica de número adicionada
+DEBUG: Adicionando token: lexema='2', token='numero', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ';' (posição 8)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=';', token='simbolo_ponto_virgula', linha=4
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 9)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: '
+' (posição 10)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 4
+DEBUG: Lendo linha 5
+
+DEBUG: Analisando linha 5: '    c:=@+b 
+'
+DEBUG: Caractere atual: ' ' (posição 0)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 1)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 2)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: ' ' (posição 3)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: 'c' (posição 4)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ':' (posição 5)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema=':=', token='simbolo_atribuicao', linha=5
+DEBUG: Avançando 2 posições
+DEBUG: Caractere atual: '@' (posição 7)
+DEBUG: Caractere não reconhecido: '@'
+DEBUG: Adicionando token: lexema='@', token='<ERRO_LEXICO>', linha=5
+DEBUG: Caractere atual: '+' (posição 8)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema='+', token='simbolo_mais', linha=5
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'b' (posição 9)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 10)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: '
+' (posição 11)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 5
+DEBUG: Lendo linha 6
+
+DEBUG: Analisando linha 6: 'END. 
+'
+DEBUG: Caractere atual: 'E' (posição 0)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'N' (posição 1)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: 'D' (posição 2)
+DEBUG: Caractere é uma letra
+DEBUG: Implementação básica de identificador adicionada
+DEBUG: Adicionando token: lexema='a', token='ident', linha=0
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: '.' (posição 3)
+DEBUG: Caractere é um símbolo
+DEBUG: Adicionando token: lexema='.', token='simbolo_ponto', linha=6
+DEBUG: Avançando 1 posições
+DEBUG: Caractere atual: ' ' (posição 4)
+DEBUG: Ignorando espaço
+DEBUG: Caractere atual: '
+' (posição 5)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 6
+DEBUG: Lendo linha 7
+
+DEBUG: Analisando linha 7: '
+'
+DEBUG: Caractere atual: '
+' (posição 0)
+DEBUG: Ignorando espaço
+DEBUG: Fim da linha 7
+DEBUG: Finalizada análise do arquivo
+a, ident
+a, ident
+a, ident
+a, ident
+,, simbolo_virgula
+a, ident
+,, simbolo_virgula
+a, ident
+;, simbolo_ponto_virgula
+a, ident
+a, ident
+a, ident
+a, ident
+a, ident
+a, ident
+:=, simbolo_atribuicao
+2, numero
+;, simbolo_ponto_virgula
+a, ident
+:=, simbolo_atribuicao
+2, numero
+;, simbolo_ponto_virgula
+a, ident
+:=, simbolo_atribuicao
+@, <ERRO_LEXICO>
++, simbolo_mais
+a, ident
+a, ident
+a, ident
+a, ident
+., simbolo_ponto

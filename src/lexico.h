@@ -30,6 +30,6 @@ extern int tokenCount;
 
 void lexico(const char* linha, int num_linha);
 int addToken(Token result);
-void automatoSymbol(char* caracter, char next_caracter, int linha);
+int automatoSymbol(char* caracter, char next_caracter, int linha);
 
 #endif
