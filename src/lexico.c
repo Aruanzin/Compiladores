@@ -24,10 +24,6 @@ const char* simbolos[] = {
 Token tokens[MAX_TOKENS];
 int tokenCount = 0;
 
-int isDelimiter(){
-    return FALSE;
-}
-
 int isReservedWord(){
     return FALSE;
 }
@@ -37,6 +33,13 @@ int isSymbol(char* caracter){
         if (strcmp(caracter, simbolos[i]) == 0) {
             return TRUE;
         }
+    }
+    return FALSE;
+}
+
+int isDelimiter(char c){
+    if(isSymbol(c) || isspace(c)){
+        return TRUE;
     }
     return FALSE;
 }
