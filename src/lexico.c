@@ -151,19 +151,41 @@ int automatoSymbol(char* caracter, char next_caracter, int linha){
 }
 
 //identifica identificador ou palavras reservadas
-int automatoIdentificador(){
+int automatoIdentificador(char* linha, int num_linha, int pointer){
     printf("DEBUG: Implementação básica de identificador adicionada\n");
     Token result;
     result.lex = 'i';  // 'i' para identificador
-    result.linha = 0;  // Será atualizado em uma implementação completa
+    result.linha = num_linha;  // Será atualizado em uma implementação completa
     result.status = 0;
+    char cadeia[100];
+    int auxIndex = 0;
+    
+    while(isDelimiter(linha[pointer])){
+        cadeia[auxIndex++] = linha[pointer++];
+    }
+
+    
+    int i = 0;
+    int key = 0;
+    while(tabelaReservados[i].lexema != NULL){
+        if(strcmp(tabelaReservados[i].lexema, cadeia) == 0){
+            strcpy(result.lexema, tabelaReservados[i].lexema);
+            strcpy(result.token, tabelaReservados[i].token);
+            key = 1;
+            break;
+        }
+        i++;
+    }
+
+    if(key == 0){
+        strcpy(result.lexema, cadeia);
+        strcpy(result.lexema, "ident");
+    }
     
     // Por enquanto, simplesmente retorna um identificador genérico
-    strcpy(result.token, "ident");
-    strcpy(result.lexema, "a");  // Placeholder
     
     addToken(result);
-    return 1;
+    return auxIndex;
 }
 
 //identifica boa formação de numeros inteiros ou reais
@@ -192,6 +214,9 @@ int automatoComentario(){
 void lexico(const char* linha, int num_linha){
     int pointer = 0;
     char caracter[2];
+    // char aux[50];
+    // int auxIndex;
+    // int counterWord = 0;
 
     printf("\nDEBUG: Analisando linha %d: '%s'\n", num_linha, linha);
 
@@ -209,7 +234,16 @@ void lexico(const char* linha, int num_linha){
 
         if (isalpha(caracter[0])) {
             printf("DEBUG: Caractere é uma letra\n");
-            int avanco = automatoIdentificador();
+
+            //adiciona cada caractere dentro da cadeia que possa ter no identificador
+            // while(isblank(caracter[0])){
+            //     if(isSymbol(caracter[0]))
+            //         break;
+            //     aux[counterWord++] = caracter[0];
+            //     caracter[0] = linha[pointer + counterWord];
+            // }
+            // counterWord = 0;
+            int avanco = automatoIdentificador(linha, num_linha, pointer);
             printf("DEBUG: Avançando %d posições\n", avanco);
             pointer += avanco;
         } else if (isdigit(caracter[0])) {
