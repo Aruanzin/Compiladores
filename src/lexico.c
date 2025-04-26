@@ -159,11 +159,19 @@ int automatoIdentificador(char* linha, int num_linha, int pointer){
     result.status = 0;
     char cadeia[100];
     int auxIndex = 0;
+    int ERRO = 0;
     
     while(isDelimiter(linha[pointer])){
+        if(isalnum(linha[pointer]) == 0 && linha[pointer] != "_"){
+            ERRO = 1;
+            result.status = 1;
+            printf("Identificador mal formatado");
+        }
+
         cadeia[auxIndex++] = linha[pointer++];
     }
 
+    
     
     int i = 0;
     int key = 0;
@@ -179,7 +187,7 @@ int automatoIdentificador(char* linha, int num_linha, int pointer){
 
     if(key == 0){
         strcpy(result.lexema, cadeia);
-        strcpy(result.lexema, "ident");
+        strcpy(result.token, "ident");
     }
     
     // Por enquanto, simplesmente retorna um identificador genérico
@@ -214,9 +222,6 @@ int automatoComentario(){
 void lexico(const char* linha, int num_linha){
     int pointer = 0;
     char caracter[2];
-    // char aux[50];
-    // int auxIndex;
-    // int counterWord = 0;
 
     printf("\nDEBUG: Analisando linha %d: '%s'\n", num_linha, linha);
 
@@ -235,14 +240,6 @@ void lexico(const char* linha, int num_linha){
         if (isalpha(caracter[0])) {
             printf("DEBUG: Caractere é uma letra\n");
 
-            //adiciona cada caractere dentro da cadeia que possa ter no identificador
-            // while(isblank(caracter[0])){
-            //     if(isSymbol(caracter[0]))
-            //         break;
-            //     aux[counterWord++] = caracter[0];
-            //     caracter[0] = linha[pointer + counterWord];
-            // }
-            // counterWord = 0;
             int avanco = automatoIdentificador(linha, num_linha, pointer);
             printf("DEBUG: Avançando %d posições\n", avanco);
             pointer += avanco;
