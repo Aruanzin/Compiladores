@@ -17,5 +17,5 @@ c, ident
 @, <ERRO_LEXICO>
 +, simbolo_mais
 b, ident
-END, END simbolo_ponto 
-
+END, END
+., simbolo_ponto

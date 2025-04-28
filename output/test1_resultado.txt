@@ -1,0 +1,10 @@
+var, ident
+1x, numero
+;, simbolo_ponto_virgula
+BEGIN, BEGIN
+x, ident
+:=, simbolo_atribuicao
+42, numero
+;, simbolo_ponto_virgula
+END, END
+., simbolo_ponto

@@ -1,276 +1,331 @@
 #include "lexico.h"
+#include <string.h>
 
 // Define global variables
-TabelaReservados tabelaReservados[] = {
-    {"CALL","simb_CALL"},
-    {"VAR", "VAR"},
-    {"BEGIN", "BEGIN"},
-    {"END", "END"},
-    {"WHILE", "WHILE"},
-    {"CONST", "CONST"},
-    {"PROCEDURE", "PROCEDURE"},
-    {"ELSE", "ELSE"},
-    {"THEN", "THEN"},
-    {"IF", "IF"},
-    {"DO", "DO"},
-    {"FOR", "FOR"},
-    {NULL, NULL}
+typedef struct { const char *lex; TokenType tipo;} Reservado;
+static Reservado tabelaReservados[] = {
+    {"CALL",TOKEN_CALL}, {"VAR",TOKEN_VAR}, {"BEGIN",TOKEN_BEGIN}, {"END",TOKEN_END}, {"WHILE",TOKEN_WHILE}, {"CONST",TOKEN_CONST}, {"PROCEDURE",TOKEN_PROCEDURE}, {"ELSE",TOKEN_ELSE}, {"THEN",TOKEN_THEN}, {"IF",TOKEN_IF}, {"DO",TOKEN_DO}, {"FOR",TOKEN_FOR}, {NULL,0}
 };
 
-const char* simbolos[] = {
+// restore comma to symbol list for delimiter purposes
+static const char *simbolos[] = {
     ";", ":", "+", "-", "*", "/", "(", ")", "=", ",", ">", "<", "."
 };
+static TokenType simbolosType[] = {
+    TOKEN_SEMICOLON, TOKEN_COLON, TOKEN_PLUS, TOKEN_MINUS,
+    TOKEN_MULT,      TOKEN_DIV,   TOKEN_LPAREN, TOKEN_RPAREN,
+    TOKEN_EQUAL,     TOKEN_COMMA, TOKEN_GT,    TOKEN_LT,    TOKEN_DOT
+};
 
-Token tokens[MAX_TOKENS];
+Token tokens[10000];
 int tokenCount = 0;
+TabelaHash tabelaPalavrasReservadas;  // Hash table for reserved words
+TabelaHash tabelaSimbolos;            // Hash table for symbols
 
-int isReservedWord(){
-    return FALSE;
+// Initialize hash table for reserved words
+void inicializarTabelaReservadas() {
+    // Count the number of reserved words
+    int numPalavrasReservadas = 0;
+    while (tabelaReservados[numPalavrasReservadas].lex != NULL) {
+        numPalavrasReservadas++;
+    }
+    
+    // Create a hash table with size about 2x the number of words (using prime number)
+    int tamanhoTabela = numPalavrasReservadas * 2 + 1;
+    hash_criar(&tabelaPalavrasReservadas, tamanhoTabela);
+    
+    // Insert all reserved words
+    for (int i = 0; i < numPalavrasReservadas; i++) {
+        hash_inserir(&tabelaPalavrasReservadas, (string)tabelaReservados[i].lex, tabelaReservados[i].tipo);
+    }
+    
+    DBG_PRINT("RES hash init %d\n", numPalavrasReservadas);
+
+    // Inicializar hash de símbolos
+    {
+        int numSimbolos = sizeof(simbolos) / sizeof(simbolos[0]);
+        int tamanhoSimbolos = numSimbolos * 2 + 1;
+        hash_criar(&tabelaSimbolos, tamanhoSimbolos);
+        for (int i = 0; i < numSimbolos; i++) {
+            hash_inserir(&tabelaSimbolos, (string)simbolos[i], simbolosType[i]);
+        }
+        DBG_PRINT("SYM hash init %d\n", numSimbolos);
+    }
 }
 
-int isSymbol(char* caracter){
-    for (int i = 0; i < sizeof(simbolos)/sizeof(simbolos[0]); i++) {
-        if (strcmp(caracter, simbolos[i]) == 0) {
-            return TRUE;
-        }
-    }
-    return FALSE;
+// Free hash table resources
+void liberarTabelaReservadas() {
+    hash_destruir(&tabelaPalavrasReservadas);
+    DBG_PRINT("Tabela hash de palavras reservadas liberada\n");
+
+    // Liberar tabela de símbolos
+    hash_destruir(&tabelaSimbolos);
+    DBG_PRINT("Tabela hash de símbolos liberada\n");
+}
+
+// signature fix to match header
+int isReservedWord(const char *palavra) {
+    return hash_buscar(&tabelaPalavrasReservadas, (string)palavra) >= 0;
+}
+
+// signature fix; drop TRUE/FALSE
+int isSymbol(const char *s) {
+    return hash_buscar(&tabelaSimbolos, (string)s) >= 0;
+}
+
+static int isSymbolChar(char c) {
+    char tmp[2] = {c,'\0'};
+    return isSymbol(tmp);
 }
 
 int isDelimiter(char c){
-    if(isSymbol(c) || isspace(c)){
-        return TRUE;
-    }
-    return FALSE;
+    return isSymbolChar(c) || isspace((unsigned char)c);
 }
 
 //adiciona os tokens que coletamos a tabela com sua tipagem e tudo mais
-int addToken(Token result){
+int addToken(Token result) {
     if (tokenCount >= MAX_TOKENS) {
         printf("Erro: número máximo de tokens atingido.\n");
         return -1;
     }
-    printf("DEBUG: Adicionando token: lexema='%s', token='%s', linha=%d\n", 
-           result.lexema, result.token, result.linha);
-    tokens[tokenCount].lex = result.lex;
-    strcpy(tokens[tokenCount].lexema, result.lexema);
-    strcpy(tokens[tokenCount].token, result.token);
-    tokens[tokenCount].linha = result.linha;
-    tokens[tokenCount].status = result.status;
+    DBG_PRINT("Adicionando token: lexema='%s', tipo=%d, linha=%d\n",
+              result.lexema, result.tipo, result.linha);
+    tokens[tokenCount] = result;   // struct copy
     tokenCount++;
     return 0;
 }
 
 //identifica operador
-int automatoSymbol(char* caracter, char next_caracter, int linha){
-    Token result;
-    result.lex = caracter[0];
-    result.linha = linha;
-    result.status = 0;
-    int tokensRead = 1;
-    
-    switch (caracter[0]) {
-        case '<':
-            if (next_caracter == '=') {
-                strcpy(result.token, "simbolo_menor_igual");
-                strcpy(result.lexema, "<=");
-                tokensRead = 2;
-            } else if (next_caracter == '>') {
-                strcpy(result.token, "simbolo_diferente");
-                strcpy(result.lexema, "<>");
-                tokensRead = 2;
-            } else {
-                strcpy(result.token, "simbolo_menor");
-                strcpy(result.lexema, "<");
-            }
-            break;
-        case '>':
-            if (next_caracter == '=') {
-                strcpy(result.token, "simbolo_maior_igual");
-                strcpy(result.lexema, ">=");
-                tokensRead = 2;
-            } else {
-                strcpy(result.token, "simbolo_maior");
-                strcpy(result.lexema, ">");
-            }
-            break;
-        case '+': 
-            strcpy(result.token, "simbolo_mais"); 
-            strcpy(result.lexema, "+"); 
-            break;
-        case '-': 
-            strcpy(result.token, "simbolo_menos"); 
-            strcpy(result.lexema, "-"); 
-            break;
-        case '*': 
-            strcpy(result.token, "simbolo_multiplicacao"); 
-            strcpy(result.lexema, "*"); 
-            break;
-        case '/': 
-            strcpy(result.token, "simbolo_divisao"); 
-            strcpy(result.lexema, "/"); 
-            break;
-        case '=': 
-            strcpy(result.token, "simbolo_igual"); 
-            strcpy(result.lexema, "="); 
-            break;
-        case ':':
-            if (next_caracter == '=') {
-                strcpy(result.token, "simbolo_atribuicao");
-                strcpy(result.lexema, ":=");
-                tokensRead = 2;
-            } else {
-                strcpy(result.token, "simbolo_dois_pontos");
-                strcpy(result.lexema, ":");
-            }
-            break;
-        case ',':
-            strcpy(result.token, "simbolo_virgula");
-            strcpy(result.lexema, ",");
-            break;
-        case ';':
-            strcpy(result.token, "simbolo_ponto_virgula");
-            strcpy(result.lexema, ";");
-            break;
-        case '(':
-            strcpy(result.token, "simbolo_abre_parenteses");
-            strcpy(result.lexema, "(");
-            break;
-        case ')':
-            strcpy(result.token, "simbolo_fecha_parenteses");
-            strcpy(result.lexema, ")");
-            break;
-        case '.':
-            strcpy(result.token, "simbolo_ponto");
-            strcpy(result.lexema, ".");
-            break;
-        default:
-            strcpy(result.token, "<ERRO_LEXICO>");
-            strcpy(result.lexema, caracter);
+int automatoSymbol(const char *c, char next, int l){
+    // handle two‑char symbols first
+    if (c[0] == ':' && next == '=') {
+        Token r = { .tipo = TOKEN_ASSIGN, .linha = l, .status = 0 };
+        strcpy(r.lexema, ":=");
+        addToken(r);
+        return 2;
     }
-    
-    addToken(result);
-    return tokensRead;
+    if (c[0] == '<' && next == '=') {
+        Token r = { .tipo = TOKEN_LE, .linha = l, .status = 0 };
+        strcpy(r.lexema, "<=");
+        addToken(r);
+        return 2;
+    }
+    if (c[0] == '>' && next == '=') {
+        Token r = { .tipo = TOKEN_GE, .linha = l, .status = 0 };
+        strcpy(r.lexema, ">=");
+        addToken(r);
+        return 2;
+    }
+    if (c[0] == '<' && next == '>') {
+        Token r = { .tipo = TOKEN_NE, .linha = l, .status = 0 };
+        strcpy(r.lexema, "<>");
+        addToken(r);
+        return 2;
+    }
+
+    Token r = {0}; r.linha = l; r.status = 0;
+    char s2[3] = { c[0], next? next : '\0', '\0' };
+    int ht = hash_buscar(&tabelaSimbolos, (string)s2);
+    if (ht < 0) {
+        s2[1] = '\0';
+        ht = hash_buscar(&tabelaSimbolos, (string)s2);
+    }
+    r.tipo = (ht >= 0) ? (TokenType)ht : TOKEN_ERROR_LEXICO;
+    strcpy(r.lexema, s2);
+
+    int tokelen = s2[1] ? 2 : 1;
+    // skip comma tokens
+    if (r.tipo != TOKEN_COMMA) {
+        addToken(r);
+    }
+    return tokelen;
 }
 
-//identifica identificador ou palavras reservadas
-int automatoIdentificador(char* linha, int num_linha, int pointer){
-    printf("DEBUG: Implementação básica de identificador adicionada\n");
-    Token result;
-    result.lex = 'i';  // 'i' para identificador
-    result.linha = num_linha;  // Será atualizado em uma implementação completa
-    result.status = 0;
-    char cadeia[100];
-    int auxIndex = 0;
-    int ERRO = 0;
-    
-    while(isDelimiter(linha[pointer])){
-        if(isalnum(linha[pointer]) == 0 && linha[pointer] != "_"){
-            ERRO = 1;
-            result.status = 1;
-            printf("Identificador mal formatado");
+// alterar tamanhoTermo para reportar erro de caracter inválido (underscore now invalid)
+static int tamanhoTermo(const char* linha, int pos, int* erro) {
+    int len = 0;
+    *erro = 0;
+    while (linha[pos+len] != '\0' && !isDelimiter(linha[pos+len])) {
+        char c = linha[pos+len];
+        if (!isalnum(c) && !isSymbolChar(c)) {
+            *erro = 1;
         }
-
-        cadeia[auxIndex++] = linha[pointer++];
+        len++;
     }
+    return len;
+}
 
-    
-    
-    int i = 0;
-    int key = 0;
-    while(tabelaReservados[i].lexema != NULL){
-        if(strcmp(tabelaReservados[i].lexema, cadeia) == 0){
-            strcpy(result.lexema, tabelaReservados[i].lexema);
-            strcpy(result.token, tabelaReservados[i].token);
-            key = 1;
-            break;
+// new: scan full numeric term (allow '.' but flag as error)
+static int tamanhoNumero(const char *linha, int pos, int *erro) {
+    int len = 0;
+    *erro = 0;
+    while (linha[pos+len] != '\0' && !isspace((unsigned char)linha[pos+len])
+           && !isSymbolChar(linha[pos+len])) {
+        char c = linha[pos+len];
+        if (!isdigit(c)) {
+            *erro = 1;  // flag float or invalid char
         }
-        i++;
+        len++;
     }
-
-    if(key == 0){
-        strcpy(result.lexema, cadeia);
-        strcpy(result.token, "ident");
-    }
-    
-    // Por enquanto, simplesmente retorna um identificador genérico
-    
-    addToken(result);
-    return auxIndex;
+    return len;
 }
 
-//identifica boa formação de numeros inteiros ou reais
-int automatoNumero(){
-    printf("DEBUG: Implementação básica de número adicionada\n");
-    Token result;
-    result.lex = 'n';  // 'n' para número
-    result.linha = 0;  // Será atualizado em uma implementação completa
-    result.status = 0;
-    
-    // Por enquanto, simplesmente retorna um número genérico
-    strcpy(result.token, "numero");
-    strcpy(result.lexema, "2");  // Placeholder
-    
-    addToken(result);
-    return 1;
+// updated comment automaton: unterminated comment → single‐line error token
+int automatoComentario(const char* linha, int pointer, int num_linha) {
+    int start = pointer;
+    pointer++;  // skip '{'
+    while (linha[pointer] != '\0' && linha[pointer] != '}') {
+        pointer++;
+    }
+    if (linha[pointer] == '}') {
+        pointer++;
+    } else {
+        int len = pointer - start;
+        int copy_len = (len > 99) ? 99 : len;
+        // strip trailing newline if present
+        if (copy_len > 0 && linha[start + copy_len ] == '\n')
+            copy_len--;
+        Token e = { .tipo = TOKEN_ERROR_LEXICO, .linha = num_linha, .status = 1 };
+        strncpy(e.lexema, linha + start, copy_len);
+        e.lexema[copy_len] = '\0';
+        addToken(e);
+    }
+    return pointer - start;
 }
 
-int automatoComentario(){
-    // Implementar automato para comentarios
-    return 0;
+// generic scan
+void scanTermo(const char *linha, int *ptr, int num_linha,
+               void (*classify)(const char*,int,int,int)) {
+    int err, len = tamanhoTermo(linha,*ptr,&err);
+    char termo[100];
+    int sz = len<99?len:99;
+    strncpy(termo, linha+*ptr, sz); termo[sz]=0;
+    classify(termo, err, len, num_linha);
+    *ptr += len;
+}
 
+// identifier vs reserved
+static void automatoIdentificador(const char* t,int err,int len,int l){
+    // error if invalid char or too long
+    if (err || len > 99) {
+        Token e = { .tipo = TOKEN_ERROR_LEXICO, .linha = l, .status = 0 };
+        if (err)      e.status |= 1; 
+        if (len > 99) e.status |= 2;
+        strncpy(e.lexema, t, 99); e.lexema[99]=0;
+        addToken(e);
+        return;
+    }
+    // valid identifier or reserved
+    Token r = { .linha = l, .status = 0 };
+    int ht = hash_buscar(&tabelaPalavrasReservadas, (string)t);
+    r.tipo = (ht >= 0) ? (TokenType)ht : TOKEN_IDENTIFIER;
+    strcpy(r.lexema, t);
+    addToken(r);
+}
+
+static void automatoNumero(const char* t,int err,int len,int l){
+    // error if invalid char or too long
+    if (err || len > 99) {
+        Token e = { .tipo = TOKEN_ERROR_LEXICO, .linha = l, .status = 0 };
+        if (err)      e.status |= 1;
+        if (len > 99) e.status |= 2;
+        strncpy(e.lexema, t, 99); e.lexema[99]=0;
+        addToken(e);
+        return;
+    }
+    // valid number
+    for(int i = 0; i < len; i++) {
+        if (!isdigit(t[i])) {
+            Token e = { .tipo = TOKEN_ERROR_LEXICO, .linha = l, .status = 0 };
+            e.status |= 1;
+            strncpy(e.lexema, t, 99); e.lexema[99]=0;
+            addToken(e);
+            return;
+        }
+    }
+
+
+    Token r = { .tipo = TOKEN_NUMBER, .linha = l, .status = 0 };
+    strcpy(r.lexema, t);
+    addToken(r);
 }
 
 //fazer aqui o começo da analise para saber qual automato acionar
 void lexico(const char* linha, int num_linha){
+    // Ensure hash table is initialized on first call
+    static int initialized = 0;
+    if (!initialized) {
+        inicializarTabelaReservadas();
+        initialized = 1;
+    }
+    
     int pointer = 0;
     char caracter[2];
 
-    printf("\nDEBUG: Analisando linha %d: '%s'\n", num_linha, linha);
+    DBG_PRINT("\nAnalisando linha %d: '%s'\n", num_linha, linha);
 
     while (linha[pointer] != '\0') {
         caracter[0] = linha[pointer];
         caracter[1] = '\0';
 
-        printf("DEBUG: Caractere atual: '%c' (posição %d)\n", caracter[0], pointer);
+        DBG_PRINT("Caractere atual: '%c' (posição %d)\n", caracter[0], pointer);
 
         if (isspace(caracter[0])) {
-            printf("DEBUG: Ignorando espaço\n");
+            DBG_PRINT("Ignorando espaço\n");
             pointer++;
             continue;
         }
 
-        if (isalpha(caracter[0])) {
-            printf("DEBUG: Caractere é uma letra\n");
+        // Tratar comentário {...}
+        if (caracter[0] == '{') {
+            DBG_PRINT("Caractere inicia comentário\n");
+            int avanco = automatoComentario(linha, pointer, num_linha);
+            DBG_PRINT("Avançando %d posições (comentário)\n", avanco);
+            pointer += avanco;
+            continue;
+        }
 
-            int avanco = automatoIdentificador(linha, num_linha, pointer);
-            printf("DEBUG: Avançando %d posições\n", avanco);
-            pointer += avanco;
-        } else if (isdigit(caracter[0])) {
-            printf("DEBUG: Caractere é um dígito\n");
-            int avanco = automatoNumero();
-            printf("DEBUG: Avançando %d posições\n", avanco);
-            pointer += avanco;
-        } else if (isSymbol(caracter)) {
-            printf("DEBUG: Caractere é um símbolo\n");
+        if (isSymbol(caracter)) {
+            DBG_PRINT("Caractere é um símbolo\n");
             char next_char = '\0';
             if (linha[pointer + 1] != '\0') {
                 next_char = linha[pointer + 1];
             }
             int avanco = automatoSymbol(caracter, next_char, num_linha);
-            printf("DEBUG: Avançando %d posições\n", avanco);
+            DBG_PRINT("Avançando %d posições\n", avanco);
             pointer += avanco;
-        } else {
-            printf("DEBUG: Caractere não reconhecido: '%c'\n", caracter[0]);
-            Token error;
-            error.lex = caracter[0];
-            error.linha = num_linha;
-            error.status = 0;
-            strcpy(error.lexema, caracter);
-            strcpy(error.token, "<ERRO_LEXICO>");
-            addToken(error);
-            pointer++; // Evitar loop infinito
+            continue;
         }
+
+        if (isalpha(caracter[0])) {
+            DBG_PRINT("Caractere é uma letra\n");
+            scanTermo(linha, &pointer, num_linha, automatoIdentificador);
+            continue;
+        }
+
+        // 4) idem para números
+        if (isdigit(caracter[0])) {
+            DBG_PRINT("Caractere é um dígito\n");
+            // scan integer (dots cause err)
+            int err_num, len_num = tamanhoNumero(linha, pointer, &err_num);
+            char termo[100];
+            int sz = len_num < 99 ? len_num : 99;
+            strncpy(termo, linha + pointer, sz);
+            termo[sz] = '\0';
+            automatoNumero(termo, err_num, len_num, num_linha);
+            pointer += len_num;
+            continue;
+        }
+
+        // 5) caso não reconhecido
+        DBG_PRINT("Caractere não reconhecido: '%c'\n", caracter[0]);
+        Token error = {0}; // Initialize struct
+        error.linha = num_linha;
+        error.status = 1; // Indicate error status
+        error.tipo = TOKEN_ERROR_LEXICO; // Set the error type
+        strcpy(error.lexema, caracter); // Store the problematic character
+        addToken(error);
+        pointer++; // Evitar loop infinito
     }
-    printf("DEBUG: Fim da linha %d\n", num_linha);
+    DBG_PRINT("Fim da linha %d\n", num_linha);
 }

@@ -1,0 +1,4 @@
+VAR 2x;
+BEGIN
+  2x := 5;
+END.

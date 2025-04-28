@@ -1,0 +1,4 @@
+VAR x;
+BEGIN
+  x := 3; { Este comentário nunca fecha...
+END.

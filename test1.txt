@@ -1,4 +1,0 @@
-var x;
-begin
-  x := 42;
-end.

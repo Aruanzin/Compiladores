@@ -1,0 +1,5 @@
+VAR x, y, z?AS;
+BEGIN
+  x := 2;
+  y := x * (x + 3);
+END.

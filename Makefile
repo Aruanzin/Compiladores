@@ -1,5 +1,5 @@
 all:
-	gcc -o pl0_lexer src/*.c -Wall -g
+	gcc -o pl0_lexer src/*.c -Wall -g -lm
 
 run: all
 	./pl0_lexer
@@ -32,6 +32,12 @@ test2: all
 		echo "TESTE FALHOU! Veja as diferenças abaixo:"; \
 		diff -y output/test2_resultado.txt tests/test2.out; \
 	fi
+
+test3: all
+	@echo "Executando teste com test3.txt"
+	@mkdir -p output
+	@echo "tests/test3.txt" | ./pl0_lexer > output/test3_resultado.txt
+	@echo "Resultado salvo em output/test3_resultado.txt"
 
 # Executar todos os testes disponíveis
 test_all: test1 test2
