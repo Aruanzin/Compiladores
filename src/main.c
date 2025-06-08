@@ -1,19 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "lexico.h"
+#include "sintatico.h"
 
-static const char *tokenTypeNames[] = {
-    /* reserved words */
-    "CALL","VAR","BEGIN","END","WHILE","CONST","PROCEDURE","ELSE",
-    "THEN","IF","DO","FOR",
-    /* symbols */
-    "simbolo_ponto_virgula","simbolo_dois_pontos","simbolo_mais","simbolo_menos",
-    "simbolo_multiplicacao","simbolo_divisao","simbolo_abre_parenteses","simbolo_fecha_parenteses",
-    "simbolo_igual","simbolo_virgula","simbolo_maior","simbolo_menor","simbolo_ponto",
-    "simbolo_menor_igual","simbolo_maior_igual","simbolo_diferente","simbolo_atribuicao",
-    /* generic */
-    "ident","numero","<ERRO_LEXICO>"
-};
+// Global flag for hints
+int show_hints = 0;
 
 void analisarArquivo(FILE* arquivo) {
     char linha[256];
@@ -37,27 +29,44 @@ void imprimeTokens(Token* tokens, int tokenCount) {
     }
 }
 
-int main() {
-    char nomeArquivo[256];
+void init_lexer(const char* nome_arquivo) {
+    fonte = fopen(nome_arquivo, "r");
+    if (!fonte) {
+        fprintf(stderr, "Erro ao abrir arquivo fonte: %s\n", nome_arquivo);
+        exit(1);
+    }
+    linha_num = 0;
+    pos = 0;
+    linha[0] = '\0';
+    inicializarTabelaReservadas();
+}
 
-    if (fgets(nomeArquivo, sizeof(nomeArquivo), stdin) != NULL) {
-        nomeArquivo[strcspn(nomeArquivo, "\n")] = '\0';
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Uso: %s [--hint] <arquivo.pl0>\n", argv[0]);
+        //return 1;
+        argv[1] = "tests/test9.txt"; // Default file for testing
     }
 
-    FILE* arquivo = fopen(nomeArquivo, "r");
-    if (!arquivo) {
-        fprintf(stderr, "Erro ao abrir arquivo: %s\n", nomeArquivo);
-        return 1;
+    // Check for hint flag
+    char* filename = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--hint") == 0) {
+            show_hints = 1;
+        } else {
+            filename = argv[i];
+        }
     }
-
-    analisarArquivo(arquivo);
-    fclose(arquivo);
-
-    imprimeTokens(tokens, tokenCount);
     
-    // Clean up the hash table
-    liberarTabelaReservadas();
+    // Use default if no filename provided
+    if (!filename) {
+        filename = "tests/test9.txt";
+    }
 
+    init_lexer(filename);
+    parse();
+    liberarTabelaReservadas();
     return 0;
 }
+
 

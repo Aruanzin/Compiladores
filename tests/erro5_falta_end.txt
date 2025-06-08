@@ -1,0 +1,4 @@
+VAR x;
+BEGIN
+  x := 10;
+.             { ERRO: ponto antes de END}

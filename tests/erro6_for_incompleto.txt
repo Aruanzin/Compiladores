@@ -1,0 +1,5 @@
+VAR i;
+BEGIN
+  FOR i := 1 DO
+    { faltando comando aqui}
+END.

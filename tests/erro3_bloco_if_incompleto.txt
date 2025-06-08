@@ -1,0 +1,5 @@
+VAR a;
+BEGIN
+  IF a = 5 THEN
+    { comando ausente }
+END.

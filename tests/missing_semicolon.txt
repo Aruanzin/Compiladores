@@ -1,0 +1,6 @@
+CONST p = 3, q = 7;
+VAR z;
+
+BEGIN
+  z := p + q
+END.

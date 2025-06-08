@@ -1,0 +1,5 @@
+VAR x;
+BEGIN
+  x := ;        { ERRO: expressão faltando após := }
+  x := 3;
+END.

@@ -1,0 +1,13 @@
+CONST m = 5;
+VAR i, fact, aux;
+
+BEGIN
+  i := 1;
+  fact := 1;
+  WHILE i <= m DO
+    BEGIN
+      fact := fact * i;
+      i := i + 1;
+    END;
+  aux := fact
+END.
