@@ -1,5 +1,5 @@
-VAR x,,;
+VAR x;
 BEGIN
-  x := 5;
+  x := 5
   y := 6     { ERRO: falta ';' antes de y}
 END.

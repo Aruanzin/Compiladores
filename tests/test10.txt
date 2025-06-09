@@ -1,0 +1,12 @@
+BEGIN 
+    a:=2; 
+    IF a>2 
+        b:=3; 
+    c:=@+b 
+END;
+BEGIN 
+    a:=2; 
+    IF a>2 
+        b:=3; 
+    c:=@+b 
+END. 

@@ -30,6 +30,19 @@ typedef struct {
     int status;
 } Token;
 
+typedef enum {
+    LEX_ERROR_INVALID_CHAR,
+    LEX_ERROR_UNDERSCORE,
+    LEX_ERROR_DECIMAL_NUMBER,
+    LEX_ERROR_STRING_LITERAL,
+    LEX_ERROR_LOGICAL_OPERATOR,
+    LEX_ERROR_UNTERMINATED_COMMENT,
+    LEX_ERROR_IDENTIFIER_TOO_LONG,
+    LEX_ERROR_NUMBER_TOO_LONG,
+    LEX_ERROR_INVALID_NUMBER,
+    LEX_ERROR_IDENTIFIER_INVALID_CHAR
+} LexErrorType;
+
 extern Token tokens[MAX_TOKENS];
 extern int tokenCount;
 extern const char *tokenTypeNames[];
@@ -47,6 +60,8 @@ Token get_next_token();
 void init_lexer(const char* nome_arquivo);
 // add scanner entrypoint
 void lexico(const char* linha, int num_linha);
+void report_lexical_error(const char* problematic_text, int line, int position, const char* full_line, LexErrorType error_type);
+LexErrorType classify_lex_error(char c, const char* term, int error_flags);
 
 // moved globals into lexico.c
 extern FILE* fonte;
@@ -56,6 +71,9 @@ extern int pos;
 
 // Global flag for hints (declared extern)
 extern int show_hints;
+
+// External declaration for error counter
+extern int num_erros_lexicos;
 
 // helper functions (no longer static)
 int automatoComentario(const char* linha, int pointer, int num_linha);
