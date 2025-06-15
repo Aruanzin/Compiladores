@@ -1,0 +1,21 @@
+CONST pi = 3.14159;
+VAR x, y;
+PROCEDURE calcular;
+BEGIN
+  x := pi * 2;  { erro: não pode usar constante }
+  IF x > 10 TEN     { erro: THEN escrito errado }
+    y := x + 1
+  ELSE
+    y := x - 1
+  FI;             { erro: deveria ser END }
+  WHILE y > 0 DO
+    y := y - 1    { erro: falta ponto e vírgula }
+  END;
+  CALL write();   { erro: write não foi definido }
+END;
+
+BEGIN
+  CALL calcular;
+  x := 42;
+  y := x + @;     { erro: @ é caractere inválido }
+END.

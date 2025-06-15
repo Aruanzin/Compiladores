@@ -1,0 +1,15 @@
+CONST limite = 50;
+VAR contador, total;
+
+PROCEDURE incrementar;
+BEGIN
+  contador := contador + 1;
+  total := total + contador
+END;
+
+BEGIN
+  contador := 0;
+  total := 0;
+  WHILE contador < limite DO CALL incrementar
+END
+.

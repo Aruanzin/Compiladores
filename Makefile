@@ -1,5 +1,5 @@
 all:
-	gcc -o pl0_lexer src/*.c -Wall -g -lm
+	gcc -o pl0_lexer src/*.c -Wall -g -lm -std=c99
 
 run: all
 	./pl0_lexer
@@ -13,6 +13,26 @@ test_file:
 	@read -p "Digite o nome do arquivo de teste: " test_file; \
 	echo $$test_file | ./pl0_lexer > output/resultado_atual.txt; \
 	echo "Resultado salvo em output/resultado_atual.txt"
+
+# Executar com recursos avançados
+run_advanced:
+	./pl0_lexer --hint
+
+run_interactive:
+	./pl0_lexer --interactive
+
+run_ide:
+	./pl0_lexer --ide
+
+# Testes rápidos
+test_procedures:
+	./pl0_lexer --hint tests/procedures_ok.txt
+
+test_lexical:
+	./pl0_lexer --hint tests/lexicos/teste1-PROF.txt
+
+test_ide:
+	./pl0_lexer --ide tests/erro1_falta_expressao.txt
 
 # Executar teste automático com test1.txt
 test1: all

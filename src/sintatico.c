@@ -3,13 +3,19 @@
 #include <string.h>
 #include "lexico.h"
 #include "sintatico.h"
+#include "colors.h"
+#include "statistics.h"
+#include "suggestions.h"
+#include "visualizer.h"
+#include "utils.h"
 
 // Global variable definitions
+ErrorRecoveryStack* error_stack = NULL;
+ContextFrame* current_context = NULL;
 Token current_token;
 int num_erros_sintaticos = 0;
-char linha_atual[256] = "";
+char linha_atual[256];
 int pos_atual = 0;
-ContextFrame* current_context = NULL;
 
 // Define shared synchronization token sets
 TokenType SYNC_STATEMENT[] = {
@@ -90,72 +96,498 @@ TokenType* get_follow_set(ParseContext context, int* size) {
     }
 }
 
-void push_context(ParseContext context) {
-    ContextFrame* frame = malloc(sizeof(ContextFrame));
-    frame->context = context;
-    frame->followers = get_follow_set(context, &frame->followers_count);
-    frame->parent = current_context;
-    current_context = frame;
+void init_error_recovery_stack() {
+    error_stack = malloc(sizeof(ErrorRecoveryStack));
+    error_stack->top = -1;
+    error_stack->max_depth = MAX_CONTEXT_DEPTH;
 }
 
-void pop_context() {
-    if (current_context) {
-        ContextFrame* old = current_context;
-        current_context = current_context->parent;
-        free(old);
+void push_context_enhanced(ParseContext context, const char* name, 
+                          TokenType* sync_tokens, int sync_count) {
+    if (error_stack->top >= MAX_CONTEXT_DEPTH - 1) {
+        fprintf(stderr, "Stack overflow: contexto muito profundo\n");
+        return;
     }
+    
+    ContextFrame* frame = malloc(sizeof(ContextFrame));
+    frame->context = context;
+    frame->context_name = string_duplicate(name);
+    frame->start_line = current_token.linha;
+    frame->start_column = current_token.coluna;
+    frame->sync_tokens = sync_tokens;
+    frame->sync_count = sync_count;
+    
+    // Obter conjunto FOLLOW
+    frame->followers = get_follow_set(context, &frame->followers_count);
+    
+    // Conectar na pilha
+    frame->parent = (error_stack->top >= 0) ? error_stack->contexts[error_stack->top] : NULL;
+    error_stack->contexts[++error_stack->top] = frame;
 }
+
+void pop_context_enhanced() {
+    if (error_stack->top < 0) return;
+    
+    ContextFrame* frame = error_stack->contexts[error_stack->top];
+    free(frame->context_name);
+    free(frame);
+    error_stack->top--;
+}
+
+// Recuperação de erro usando pilha de contexto
+int recover_from_error(const char* error_msg) {
+    if (error_stack->top < 0) {
+        syntax_error("Erro sem contexto de recuperação");
+        return 0;
+    }
+    
+    // Mostrar erro com contexto apenas se show_hints estiver ativo
+    ContextFrame* current = error_stack->contexts[error_stack->top];
+    if (show_hints) {
+        printf("ERRO SINTÁTICO: %s\n", error_msg);
+        printf("Contexto: %s (linha %d, coluna %d)\n", 
+            current->context_name, current->start_line, current->start_column);
+    }
+    
+    // Tentar recuperação em múltiplos níveis
+    for (int level = error_stack->top; level >= 0; level--) {
+        ContextFrame* frame = error_stack->contexts[level];
+        
+        // Tentar sincronização com tokens do contexto atual
+        if (try_sync_with_tokens(frame->sync_tokens, frame->sync_count)) {
+            if (show_hints) {
+                printf("Recuperação bem-sucedida no contexto: %s\n", frame->context_name);
+            }
+            return 1;
+        }
+        
+        // Tentar sincronização com conjunto FOLLOW
+        if (try_sync_with_tokens(frame->followers, frame->followers_count)) {
+            if (show_hints) {
+                printf("Recuperação usando FOLLOW do contexto: %s\n", frame->context_name);
+            }
+            return 1;
+        }
+    }
+    
+    // Recuperação de último recurso - mais conservadora
+    return panic_mode_recovery();
+}
+
+// Tentar sincronização com conjunto de tokens
+int try_sync_with_tokens(TokenType* tokens, int count) {
+    for (int i = 0; i < count; i++) {
+        if (current_token.tipo == tokens[i]) {
+            return 1;
+        }
+    }
+    
+    // Avançar tokens até encontrar um de sincronização
+    int max_skip = 50; // Limite para evitar loop infinito
+    for (int skip = 0; skip < max_skip; skip++) {
+        if (current_token.tipo == TOKEN_EOF) return 0;
+        
+        for (int i = 0; i < count; i++) {
+            if (current_token.tipo == tokens[i]) {
+                return 1;
+            }
+        }
+        current_token = get_next_token();
+    }
+    
+    return 0;
+}
+
 
 void mostrar_erro_visual(const char* msg, const char* dica) {
     if (show_hints) {
-        printf("\033[1;31m🚨 Erro sintático\033[0m na linha %d:\n", current_token.linha);
+        printf("\n" BOLD RED SYMBOL_ERROR " Erro sintático" RESET_COLOR " na linha %d:\n", current_token.linha);
         printf("   %s\n", msg);
         
         // Mostrar a linha original se disponível
         if (strlen(linha_atual) > 0) {
-            printf("\n📄 Código:\n");
-            printf("   %s", linha_atual);
-            if (linha_atual[strlen(linha_atual)-1] != '\n') {
-                printf("\n");
-            }
-            
-            // Calcular posição do ponteiro
-            int pos_ponteiro = pos_atual;
-            
-            // Ajustar posição se o token atual tem lexema conhecido
-            if (strlen(current_token.lexema) > 0) {
-                char* token_pos = strstr(linha_atual, current_token.lexema);
-                if (token_pos) {
-                    pos_ponteiro = token_pos - linha_atual;
-                }
-            }
-            
-            // Mostrar ponteiro visual
-            printf("   ");
-            for (int i = 0; i < pos_ponteiro; i++) {
-                printf(" ");
-            }
-            printf("\033[1;31m^\033[0m\n");
-            
-            // Mostrar dica
-            if (dica && strlen(dica) > 0) {
-                printf("💡 \033[1;33mDica:\033[0m %s\n", dica);
-            }
+            print_error_context(linha_atual, pos_atual, current_token.linha);
         }
         
-        printf("🔍 Token encontrado: '\033[1;36m%s\033[0m' (tipo: %s)\n\n", 
+        printf(CYAN SYMBOL_HINT " Token encontrado: " RESET_COLOR "'" BOLD CYAN "%s" RESET_COLOR "' (tipo: %s)\n", 
                current_token.lexema, tokenTypeNames[current_token.tipo]);
+        
+        // Add smart suggestions
+        print_smart_suggestions("syntax_error", current_token.lexema, TOKEN_IDENTIFIER);
+        
     } else {
         printf("Erro sintático na linha %d: %s (token: '%s')\n",
-           current_token.linha, msg, current_token.lexema);
+               current_token.linha, msg, current_token.lexema);
     }
     
+    // Update statistics
+    update_error_stats(current_token.linha, msg);
+    stats.syntax_errors++;
     num_erros_sintaticos++;
 }
 
 void syntax_error(const char* msg) {
     mostrar_erro_visual(msg, "");
 }
+const char* token_to_string(TokenType token) {
+    if (token >= 0) {
+        return tokenTypeNames[token];
+    }
+    return "UNKNOWN_TOKEN";
+}
+
+// Implementar panic_mode_recovery
+int panic_mode_recovery() {
+    printf("Entrando em modo pânico - saltando tokens até encontrar ponto de sincronização\n");
+    
+    TokenType panic_tokens[] = {
+        TOKEN_SEMICOLON, TOKEN_DOT, TOKEN_BEGIN, TOKEN_END, 
+        TOKEN_VAR, TOKEN_CONST, TOKEN_PROCEDURE, TOKEN_EOF
+    };
+    int panic_count = 8;
+    
+    int max_skip = 50;
+    for (int i = 0; i < max_skip && current_token.tipo != TOKEN_EOF; i++) {
+        for (int j = 0; j < panic_count; j++) {
+            if (current_token.tipo == panic_tokens[j]) {
+                printf("Sincronização encontrada em: %s\n", token_to_string(current_token.tipo));
+                return 1;
+            }
+        }
+        // Avançar para o próximo token (você precisa implementar esta função)
+        current_token = get_next_token();
+    }
+    
+    return 0; // Não conseguiu recuperar
+}
+
+int declaracao_const_enhanced() {
+    // Implementação básica - você pode expandir depois
+    if (current_token.tipo != TOKEN_CONST) {
+        return 0;
+    }
+    
+    current_token = get_next_token(); // Consumir CONST
+    
+    // Processar declarações de constantes
+    do {
+        if (current_token.tipo != TOKEN_IDENTIFIER) {
+            syntax_error("Esperado identificador após CONST");
+            return 0;
+        }
+        current_token = get_next_token();
+        
+        if (current_token.tipo != TOKEN_EQUAL) {
+            syntax_error("Esperado '=' após identificador da constante");
+            return 0;
+        }
+        current_token = get_next_token();
+        
+        if (current_token.tipo != TOKEN_NUMBER) {
+            syntax_error("Esperado número após '='");
+            return 0;
+        }
+        current_token = get_next_token();
+        
+        if (current_token.tipo == TOKEN_COMMA) {
+            current_token = get_next_token();
+        }
+    } while (current_token.tipo != TOKEN_SEMICOLON && current_token.tipo != TOKEN_EOF);
+    
+    if (current_token.tipo == TOKEN_SEMICOLON) {
+        current_token = get_next_token();
+    }
+    
+    return 1;
+}
+
+int declaracao_var_enhanced() {
+    if (current_token.tipo != TOKEN_VAR) {
+        return 0;
+    }
+    
+    current_token = get_next_token(); // Consumir VAR
+    
+    // Processar declarações de variáveis
+    do {
+        if (current_token.tipo != TOKEN_IDENTIFIER) {
+            syntax_error_with_hint("Esperado identificador após VAR", 
+                                 "Liste os nomes das variáveis separados por vírgula");
+            return 0;
+        }
+        current_token = get_next_token();
+        
+        if (current_token.tipo == TOKEN_COMMA) {
+            current_token = get_next_token();
+        } else if (current_token.tipo == TOKEN_IDENTIFIER) {
+            // Erro comum: esqueceu vírgula entre identificadores
+            syntax_error_with_hint("Esperado ',' entre identificadores de variáveis", 
+                                 "Separe os nomes das variáveis com vírgulas");
+            // Continuar assumindo que era uma vírgula esquecida
+        }
+    } while (current_token.tipo == TOKEN_IDENTIFIER);
+    
+    // Verificar ponto e vírgula obrigatório
+    if (current_token.tipo != TOKEN_SEMICOLON) {
+        if (current_token.tipo == TOKEN_BEGIN) {
+            syntax_error_with_hint("Esperado ';' após declaração de variáveis", 
+                                 "Declarações VAR devem terminar com ';'");
+        } else {
+            syntax_error_with_hint("Esperado ';' para finalizar declaração VAR", 
+                                 "Formato: VAR nome1, nome2, ...;");
+        }
+        return 0;
+    }
+    
+    current_token = get_next_token(); // Consumir ';'
+    return 1;
+}
+
+int declaracao_proc_enhanced() {
+    if (current_token.tipo != TOKEN_PROCEDURE) {
+        return 0;
+    }
+    
+    TokenType sync_proc[] = {TOKEN_SEMICOLON, TOKEN_BEGIN, TOKEN_PROCEDURE, TOKEN_EOF};
+    push_context_enhanced(CONTEXT_DECLARACAO_PROC, "DECLARACAO_PROC", sync_proc, 4);
+    
+    current_token = get_next_token(); // Consumir PROCEDURE
+    
+    if (current_token.tipo != TOKEN_IDENTIFIER) {
+        if (current_token.tipo == TOKEN_ERROR_LEXICO) {
+            syntax_error_with_hint("Esperado nome do procedimento", 
+                                 "PROCEDURE deve ser seguido por um identificador válido");
+        } else {
+            syntax_error_with_hint("Esperado nome do procedimento", 
+                                 "PROCEDURE deve ser seguido por um identificador válido");
+        }
+        
+        // Tentar recuperar procurando por ';' que indica fim da declaração do nome
+        TokenType sync_after_error[] = {TOKEN_SEMICOLON, TOKEN_BEGIN, TOKEN_VAR, TOKEN_CONST, TOKEN_PROCEDURE, TOKEN_EOF};
+        if (try_sync_with_tokens(sync_after_error, 6)) {
+            if (current_token.tipo == TOKEN_SEMICOLON) {
+                current_token = get_next_token(); // Consumir ';'
+                // Continuar processando como se o nome fosse válido
+            } else {
+                pop_context_enhanced();
+                return 0;
+            }
+        } else {
+            pop_context_enhanced();
+            return 0;
+        }
+    } else {
+        current_token = get_next_token();
+    }
+    
+    if (current_token.tipo != TOKEN_SEMICOLON) {
+        syntax_error_with_hint("Esperado ';' após nome do procedimento", 
+                             "Formato: PROCEDURE nome; bloco;");
+        // Tentar recuperar
+        TokenType sync_after_name[] = {TOKEN_SEMICOLON, TOKEN_BEGIN, TOKEN_VAR, TOKEN_CONST};
+        if (!try_sync_with_tokens(sync_after_name, 4)) {
+            pop_context_enhanced();
+            return 0;
+        }
+        if (current_token.tipo == TOKEN_SEMICOLON) {
+            current_token = get_next_token();
+        }
+    } else {
+        current_token = get_next_token(); // Consumir ';'
+    }
+    
+    // Verificar se há um comando direto (sem BEGIN/END) - erro comum
+    ContextFrame* frame = error_stack->contexts[error_stack->top];
+    if (current_token.tipo == TOKEN_IDENTIFIER && frame) {
+        syntax_error_with_hint("Comando fora de bloco BEGIN/END", 
+                             "Procedimentos devem ter seus comandos dentro de BEGIN...END");
+        // Consumir o comando incorreto e continuar
+        current_token = get_next_token(); // identifier
+        if (current_token.tipo == TOKEN_ASSIGN) {
+            current_token = get_next_token(); // :=
+            expressao(); // consumir a expressão
+        }
+        // Não processar bloco, já que não há BEGIN
+        pop_context_enhanced();
+        return 0;
+    }
+    
+    // Processar bloco do procedimento
+    if (!bloco_enhanced()) {
+        syntax_error_with_hint("Erro no corpo do procedimento", 
+                             "Procedimento deve ter um bloco válido");
+        advanced_synchronize();
+        pop_context_enhanced();
+        return 0;
+    }
+    
+    // Verificar ';' após procedimento - OBRIGATÓRIO
+    if (current_token.tipo != TOKEN_SEMICOLON) {
+        syntax_error_with_hint("Esperado ';' após declaração de procedimento", 
+                             "Procedimentos devem terminar com ';'");
+        // Tentar encontrar o ';' ou próximo elemento válido
+        TokenType sync_end_proc[] = {TOKEN_SEMICOLON, TOKEN_PROCEDURE, TOKEN_BEGIN, TOKEN_EOF};
+        if (try_sync_with_tokens(sync_end_proc, 4)) {
+            if (current_token.tipo == TOKEN_SEMICOLON) {
+                current_token = get_next_token();
+            }
+        } else {
+            pop_context_enhanced();
+            return 0;
+        }
+    } else {
+        current_token = get_next_token(); // Consumir ';'
+    }
+    
+    pop_context_enhanced();
+    return 1;
+}
+
+
+int comando_composto_enhanced() {
+    if (current_token.tipo != TOKEN_BEGIN) {
+        syntax_error("Esperado BEGIN");
+        return 0;
+    }
+    current_token = get_next_token();
+    
+    int comandos_executados = 0;
+    
+    // Processar primeiro comando se não for END
+    if (current_token.tipo != TOKEN_END && current_token.tipo != TOKEN_EOF) {
+        if (current_token.tipo == TOKEN_DOT) {
+            syntax_error_with_hint("Ponto encontrado antes de END", 
+                                 "O ponto '.' deve vir apenas após END, no final do programa");
+            return 0;
+        }
+        
+        if (comando_enhanced()) {
+            comandos_executados++;
+            
+            // Verificar se o comando terminou sem ponto e vírgula
+            if (current_token.tipo == TOKEN_END) {
+                // Comando sem ponto e vírgula antes de END - avisar mas aceitar
+                if (show_hints) {
+                    printf("💡 \033[1;33mAviso:\033[0m Último comando sem ';' - recomendado adicionar\n");
+                }
+            } else if (current_token.tipo != TOKEN_SEMICOLON && 
+                      current_token.tipo != TOKEN_EOF && 
+                      current_token.tipo != TOKEN_DOT) {
+                syntax_error_with_hint("Esperado ';' após comando", 
+                                     "Comandos devem terminar com ponto e vírgula");
+                // Tentar recuperar
+                TokenType sync_after_cmd[] = {TOKEN_SEMICOLON, TOKEN_END, TOKEN_EOF};
+                if (!try_sync_with_tokens(sync_after_cmd, 3)) {
+                    return 0;
+                }
+            }
+        } else {
+            // Se comando falhou, tentar sincronizar
+            TokenType sync_cmd[] = {TOKEN_SEMICOLON, TOKEN_END, TOKEN_EOF};
+            if (!try_sync_with_tokens(sync_cmd, 3)) {
+                return 0; // Não conseguiu recuperar
+            }
+        }
+    }
+    
+    // Processar comandos separados por ponto e vírgula
+    while (current_token.tipo == TOKEN_SEMICOLON || 
+           (current_token.tipo == TOKEN_IDENTIFIER && comandos_executados > 0)) {
+        
+        // Se encontrou identificador sem ';' precedente
+        if (current_token.tipo == TOKEN_IDENTIFIER) {
+            syntax_error_with_hint("Esperado ';' entre comandos", 
+                                 "Comandos devem ser separados por ponto e vírgula");
+        } else {
+            current_token = get_next_token(); // Consumir ';'
+        }
+        
+        if (current_token.tipo == TOKEN_END) {
+            // Ponto e vírgula antes de END é permitido mas desnecessário
+            if (show_hints) {
+                printf("💡 \033[1;33mAviso:\033[0m Ponto e vírgula desnecessário antes de 'END'\n");
+            }
+            break;
+        } else if (current_token.tipo == TOKEN_ELSE) {
+            syntax_error_with_hint("Ponto e vírgula inválido antes de 'ELSE'", 
+                                 "ELSE deve seguir diretamente após comando IF");
+            break;
+        } else if (current_token.tipo == TOKEN_DOT) {
+            syntax_error_with_hint("Ponto e vírgula antes de '.' final do programa", 
+                                 "O programa deve terminar apenas com '.'");
+            break;
+        } else if (current_token.tipo == TOKEN_EOF) {
+            syntax_error_with_hint("Programa terminado inesperadamente", 
+                                 "Bloco BEGIN não foi fechado com END");
+            break;
+        }
+        
+        if (comando_enhanced()) {
+            comandos_executados++;
+        } else {
+            // Se comando falhou, tentar sincronizar
+            TokenType sync_cmd[] = {TOKEN_SEMICOLON, TOKEN_END, TOKEN_EOF};
+            if (!try_sync_with_tokens(sync_cmd, 3)) {
+                break; // Não conseguiu recuperar
+            }
+        }
+    }
+    
+    if (current_token.tipo != TOKEN_END) {
+        if (current_token.tipo == TOKEN_EOF) {
+            syntax_error_with_hint("Bloco BEGIN não foi fechado", 
+                                 "Adicione 'END' para fechar o bloco BEGIN");
+        } else if (current_token.tipo == TOKEN_DOT) {
+            syntax_error_with_hint("Bloco BEGIN não foi fechado antes do fim do programa", 
+                                 "Adicione 'END' antes do '.' final");
+        } else if (current_token.tipo == TOKEN_IDENTIFIER && strcmp(current_token.lexema, "EN") == 0) {
+            syntax_error_with_hint("Token inválido 'EN' - possível erro de digitação", 
+                                 "Verifique se era para ser 'END'");
+            // Tentar recuperar assumindo que era END
+            current_token = get_next_token(); // Consumir 'EN'
+            if (current_token.tipo == TOKEN_SEMICOLON) {
+                // Parece que era mesmo END;
+                current_token = get_next_token(); // Consumir ';'
+                return 1; // Aceitar como se fosse END;
+            }
+        } else {
+            syntax_error_with_hint("Token inesperado em bloco BEGIN", 
+                                 "Esperado 'END' para fechar o bloco");
+        }
+        return 0;
+    }
+    
+    current_token = get_next_token(); // Consumir END
+    return 1; // Sempre retorna sucesso se chegou até END
+}
+
+int detect_missing_var_declaration() {
+    // Look for pattern: identifier followed by comma or identifier followed by semicolon
+    // This suggests a variable list without VAR keyword
+    if (current_token.tipo == TOKEN_IDENTIFIER) {
+        // Verificar se parece com uma lista de variáveis
+        // Salvar estado atual
+        int saved_pos = pos;
+        char saved_line[256];
+        strcpy(saved_line, linha);
+        
+        // Fazer lookahead simples
+        Token next_token = get_next_token();
+        
+        // Restaurar estado
+        pos = saved_pos;
+        strcpy(linha, saved_line);
+        
+        // Verificar padrões típicos de declaração de variáveis
+        if (next_token.tipo == TOKEN_COMMA || 
+            next_token.tipo == TOKEN_SEMICOLON ||
+            (next_token.tipo == TOKEN_IDENTIFIER)) {
+            return 1; // Provável declaração de variáveis sem VAR
+        }
+    }
+    return 0;
+}
+
 
 void syntax_error_with_hint(const char* msg, const char* dica) {
     if (show_hints) {
@@ -180,7 +612,7 @@ void lexico_error(const char* msg) {
         
         printf("🔍 Token problemático: '\033[1;36m%s\033[0m'\n\n", current_token.lexema);
     } else {
-        printf("Erro léxico, linha %d\n", current_token.linha);
+        printf("Erro léxico, linha %d - %s\n", current_token.linha, msg);
     }
     num_erros_lexicos++;
 }
@@ -317,19 +749,31 @@ int eat_advanced(TokenType esperado, ParseContext context) {
     if (current_token.tipo == esperado) {
         current_token = get_next_token();
         if (current_token.tipo == TOKEN_ERROR_LEXICO) {
+            lexico_error("Erro léxico encontrado");
             return 0; // Error
         }
         return 1; // Success
     } else {
         char msg[256];
-        // Updated message to show both expected and found tokens
-        snprintf(msg, sizeof(msg), "Esperado token '%s', mas encontrado '%s'", 
-                 tokenTypeNames[esperado], tokenTypeNames[current_token.tipo]);
-
+        
+        // Sugerir correção específica baseada no contexto
+        const char* sugestao = sugerir_correcao(esperado, current_token.tipo);
+        
+        if (sugestao) {
+            snprintf(msg, sizeof(msg), "Esperado '%s', mas encontrado '%s'", 
+                     tokenTypeNames[esperado], tokenTypeNames[current_token.tipo]);
+            syntax_error_with_hint(msg, sugestao);
+        } else {
+            snprintf(msg, sizeof(msg), "Esperado '%s', mas encontrado '%s'", 
+                     tokenTypeNames[esperado], tokenTypeNames[current_token.tipo]);
+            syntax_error(msg);
+        }
+        
         // Perform advanced synchronization for general errors
-        push_context(context);
+        TokenType sync_generic[] = {TOKEN_SEMICOLON, TOKEN_END, TOKEN_DOT, TOKEN_EOF};
+        push_context_enhanced(context, "RECUPERACAO", sync_generic, 4);
         int consumed = advanced_synchronize();
-        pop_context();
+        pop_context_enhanced();
         
         if (show_hints && consumed > 0) {
             printf("🔧 \033[1;32mContinuando análise...\033[0m\n\n");
@@ -337,28 +781,6 @@ int eat_advanced(TokenType esperado, ParseContext context) {
         
         return 0; // Error, synchronization occurred
     }
-}
-
-// Special function to detect and handle missing VAR declarations
-int detect_missing_var_declaration() {
-    // Look for pattern: identifier followed by comma or identifier followed by semicolon
-    // This suggests a variable list without VAR keyword
-    if (current_token.tipo == TOKEN_IDENTIFIER) {
-        // Save current state for lookahead
-        Token saved_token = current_token;
-        Token next_token = get_next_token();
-        
-        // Check for variable declaration patterns
-        int looks_like_var_list = 0;
-        if (next_token.tipo == TOKEN_COMMA || next_token.tipo == TOKEN_SEMICOLON) {
-            looks_like_var_list = 1;
-        }
-        
-        // Restore token for processing
-        current_token = saved_token;
-        return looks_like_var_list;
-    }
-    return 0;
 }
 
 // Special function to detect multiple BEGIN blocks (missing PROCEDURE)
@@ -381,148 +803,285 @@ int detect_multiple_begin_blocks() {
 
 // Enhanced programa function with better structure error detection
 void programa_enhanced() {
-    push_context(CONTEXT_PROGRAMA);
+    TokenType sync_programa[] = {TOKEN_DOT, TOKEN_EOF};
+    push_context_enhanced(CONTEXT_PROGRAMA, "PROGRAMA", sync_programa, 2);
     
-    // First, try to parse as a normal program
+    // Inicializar pilha de recuperação de erros
+    if (!error_stack) {
+        init_error_recovery_stack();
+    }
+    
+    // Analisar o bloco principal
     int parse_success = bloco_enhanced();
     
-    // Check for common program structure errors
-    if (!parse_success) {
-        if (show_hints) {
-            printf("🔍 \033[1;33mAnálise de estrutura:\033[0m Detectando problemas comuns...\n");
+    // Verificar término do programa
+    if (current_token.tipo == TOKEN_DOT) {
+        current_token = get_next_token();
+        
+        // Verificar se há tokens extras após o ponto
+        if (current_token.tipo != TOKEN_EOF) {
+            syntax_error_with_hint("Token inesperado após '.' final", 
+                                 "O programa deve terminar com '.'");
+        }
+    } else if (current_token.tipo == TOKEN_SEMICOLON) {
+        // Verificar se realmente é final do programa ou se é de um procedimento
+        // Se chegamos aqui após processar o bloco principal, é erro de final
+        if (parse_success) {
+            syntax_error_with_hint("Esperado '.' no final do programa, mas encontrado ';'", 
+                                 "Programas devem terminar com '.' (não ';')");
+        } else {
+            // Se houve erro no parsing, pode ser que não conseguimos processar tudo
+            syntax_error_with_hint("Erro na estrutura do programa", 
+                                 "Verifique se todos os procedimentos estão corretos e o programa termina com '.'");
         }
         
-        // Reset and try alternative parsing strategies
-        // This is where we could implement recovery for major structural issues
-        syntax_error_with_hint("Estrutura de programa inválida", 
-                             "Verifique se o programa segue a estrutura: [CONST...] [VAR...] [PROCEDURE...] BEGIN...END.");
-    }
-    
-    if (!eat_advanced(TOKEN_DOT, CONTEXT_PROGRAMA)) {
-        if (show_hints) {
-            printf("⚠️  Programa pode estar incompleto - esperado '.' no final\n");
+        // Tentar recuperar procurando por '.' ou aceitando fim
+        TokenType sync_final[] = {TOKEN_DOT, TOKEN_EOF};
+        if (try_sync_with_tokens(sync_final, 2)) {
+            if (current_token.tipo == TOKEN_DOT) {
+                current_token = get_next_token();
+            }
+        }
+    } else if (current_token.tipo == TOKEN_EOF) {
+        if (!parse_success) {
+            syntax_error_with_hint("Programa incompleto", 
+                                 "Verifique se o programa está completo e termina com '.'");
+        } else {
+            syntax_error_with_hint("Programa terminou sem o ponto final", 
+                                 "Todo programa deve terminar com '.'");
+        }
+    } else {
+        if (!parse_success) {
+            syntax_error_with_hint("Estrutura de programa inválida", 
+                                 "Verifique se o programa segue a estrutura: [CONST...] [VAR...] [PROCEDURE...] BEGIN...END.");
+        } else {
+            syntax_error_with_hint("Esperado '.' no final do programa", 
+                                 "O programa deve terminar com um ponto após END");
+        }
+        
+        // Tentar encontrar o ponto final
+        TokenType sync_dot[] = {TOKEN_DOT, TOKEN_EOF};
+        if (try_sync_with_tokens(sync_dot, 2)) {
+            if (current_token.tipo == TOKEN_DOT) {
+                current_token = get_next_token();
+            }
         }
     }
-    pop_context();
+    
+    pop_context_enhanced();
 }
-
 // Enhanced bloco function with special error handling
 int bloco_enhanced() {
-    push_context(CONTEXT_BLOCO);
+    TokenType sync_bloco[] = {TOKEN_BEGIN, TOKEN_END, TOKEN_DOT, TOKEN_SEMICOLON};
+    push_context_enhanced(CONTEXT_BLOCO, "BLOCO", sync_bloco, 4);
+    
     int success = 1;
-    int has_main_command = 0;
     
-    // Handle CONST declarations
+    // Declarações de constantes
     if (current_token.tipo == TOKEN_CONST) {
-        push_context(CONTEXT_DECLARACAO_CONST);
-        eat_advanced(TOKEN_CONST, CONTEXT_DECLARACAO_CONST);
-        eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_CONST);
-        eat_advanced(TOKEN_EQUAL, CONTEXT_DECLARACAO_CONST);
-        eat_advanced(TOKEN_NUMBER, CONTEXT_DECLARACAO_CONST);
-        while (current_token.tipo == TOKEN_COMMA) {
-            eat_advanced(TOKEN_COMMA, CONTEXT_DECLARACAO_CONST);
-            eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_CONST);
-            eat_advanced(TOKEN_EQUAL, CONTEXT_DECLARACAO_CONST);
-            eat_advanced(TOKEN_NUMBER, CONTEXT_DECLARACAO_CONST);
-        }
-        eat_advanced(TOKEN_SEMICOLON, CONTEXT_DECLARACAO_CONST);
-        pop_context();
-    }
-
-    // Enhanced VAR handling with missing VAR detection
-    if (current_token.tipo == TOKEN_VAR) {
-        push_context(CONTEXT_DECLARACAO_VAR);
-        eat_advanced(TOKEN_VAR, CONTEXT_DECLARACAO_VAR);
-        eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_VAR);
-        while (current_token.tipo == TOKEN_COMMA) {
-            eat_advanced(TOKEN_COMMA, CONTEXT_DECLARACAO_VAR);
-            eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_VAR);
-        }
-        if (current_token.tipo != TOKEN_SEMICOLON) {
-            syntax_error("esperado ';' após declaração de variáveis");
-            advanced_synchronize();
-        } else {
-            eat_advanced(TOKEN_SEMICOLON, CONTEXT_DECLARACAO_VAR);
-        }
-        pop_context();
-    } else if (detect_missing_var_declaration()) {
-        // Handle missing VAR keyword
-        if (show_hints) {
-            syntax_error_with_hint("Possível declaração de variáveis sem 'VAR'", 
-                                 "Adicione 'VAR' antes da lista de identificadores. Ex: VAR x, y;");
-        } else {
-            syntax_error("Esperado 'VAR' antes da declaração de variáveis");
-        }
-        
-        // Try to recover by parsing as variable declaration
-        push_context(CONTEXT_DECLARACAO_VAR);
-        eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_VAR);
-        while (current_token.tipo == TOKEN_COMMA) {
-            eat_advanced(TOKEN_COMMA, CONTEXT_DECLARACAO_VAR);
-            eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_VAR);
-        }
-        if (current_token.tipo == TOKEN_SEMICOLON) {
-            eat_advanced(TOKEN_SEMICOLON, CONTEXT_DECLARACAO_VAR);
-        } else {
-            syntax_error("esperado ';' após declaração de variáveis");
-            advanced_synchronize();
-        }
-        pop_context();
-        success = 0; // Mark as having errors but recovered
-    }
-
-    // Handle PROCEDURE declarations
-    while (current_token.tipo == TOKEN_PROCEDURE) {
-        push_context(CONTEXT_DECLARACAO_PROC);
-        eat_advanced(TOKEN_PROCEDURE, CONTEXT_DECLARACAO_PROC);
-        eat_advanced(TOKEN_IDENTIFIER, CONTEXT_DECLARACAO_PROC);
-        eat_advanced(TOKEN_SEMICOLON, CONTEXT_DECLARACAO_PROC);
-        if(!bloco_enhanced()){
-            syntax_error_with_hint("Erro no bloco do procedimento", 
-                                 "Verifique se o procedimento está bem formado");
-            advanced_synchronize();
+        if (!declaracao_const_enhanced()) {
             success = 0;
-        }
-        if (current_token.tipo != TOKEN_SEMICOLON) {
-            syntax_error_with_hint("Esperado ';' após bloco do procedimento", 
-                                 "Procedimentos devem terminar com ponto e vírgula");
-            advanced_synchronize();
-            success = 0;
-        } else {
-            eat_advanced(TOKEN_SEMICOLON, CONTEXT_DECLARACAO_PROC);
-        }
-        pop_context();
-    }
-
-    // Handle main command with special detection for multiple BEGINs
-    if (current_token.tipo == TOKEN_BEGIN) {
-        if (has_main_command && detect_multiple_begin_blocks()) {
-            if (show_hints) {
-                syntax_error_with_hint("Múltiplos blocos BEGIN detectados", 
-                                     "Cada bloco adicional deveria ser um PROCEDURE. Ex: PROCEDURE nome; BEGIN...END;");
-            } else {
-                syntax_error("Múltiplos blocos BEGIN sem PROCEDURE");
+            if (!recover_from_error("Erro na declaração de constantes")) {
+                pop_context_enhanced();
+                return 0;
             }
-            success = 0;
         }
-        has_main_command = 1;
     }
     
-    int command_result = comando_enhanced();
-    if (!command_result) {
+    // Declarações de variáveis - melhorar detecção de erro
+    if (current_token.tipo == TOKEN_VAR) {
+        if (!declaracao_var_enhanced()) {
+            success = 0;
+            if (!recover_from_error("Erro na declaração de variáveis")) {
+                pop_context_enhanced();
+                return 0;
+            }
+        }
+    } else if (current_token.tipo == TOKEN_IDENTIFIER) {
+        // Possível erro: palavra-chave mal digitada seguida de lista de variáveis
+        if (detect_missing_var_declaration()) {
+            syntax_error_with_hint("Possível erro de digitação em 'VAR'", 
+                                 "Verifique se 'VAR' está escrito corretamente");
+            // Tentar recuperar assumindo que era uma declaração VAR
+            advanced_synchronize();
+            // Continuar para encontrar BEGIN
+        }
+    }
+    
+    // Declarações de procedimentos - MELHORADA
+    while (current_token.tipo == TOKEN_PROCEDURE) {
+        if (!declaracao_proc_enhanced()) {
+            // Se a declaração falhou, verificar se conseguimos recuperar
+            if (current_token.tipo == TOKEN_PROCEDURE || current_token.tipo == TOKEN_BEGIN) {
+                // Conseguimos recuperar e encontrar próximo procedimento ou BEGIN
+                if (show_hints) {
+                    printf("🔄 Recuperação: Continuando após erro em procedimento\n");
+                }
+                // Não marcar como falha total se conseguimos recuperar
+                continue;
+            } else {
+                success = 0;
+                if (!recover_from_error("Erro na declaração de procedimento")) {
+                    // Tentar continuar - pode haver mais procedimentos
+                    TokenType sync_next_proc[] = {TOKEN_PROCEDURE, TOKEN_BEGIN, TOKEN_EOF};
+                    if (try_sync_with_tokens(sync_next_proc, 3)) {
+                        continue; // Tentar próximo procedimento ou BEGIN
+                    } else {
+                        pop_context_enhanced();
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Se ainda não encontrou BEGIN, tentar sincronizar
+    if (current_token.tipo != TOKEN_BEGIN) {
+        if (show_hints) {
+            printf("🔍 \033[1;33mBuscando BEGIN...\033[0m\n");
+        }
+        TokenType sync_begin[] = {TOKEN_BEGIN, TOKEN_EOF};
+        if (try_sync_with_tokens(sync_begin, 2)) {
+            if (show_hints) {
+                printf("✅ \033[1;32mBEGIN encontrado, continuando análise\033[0m\n");
+            }
+        }
+    }
+    
+    // Comando composto - OBRIGATÓRIO para programa principal
+    if (current_token.tipo == TOKEN_BEGIN) {
+        if (!comando_composto_enhanced()) {
+            success = 0;
+            if (!recover_from_error("Erro no comando composto")) {
+                pop_context_enhanced();
+                return 0;
+            }
+        }
+    } else {
+        syntax_error_with_hint("Esperado BEGIN para iniciar bloco de comandos", 
+                             "Todo programa deve ter um bloco BEGIN...END");
         success = 0;
     }
     
-    pop_context();
+    pop_context_enhanced();
     return success;
+}
+
+// Diagnóstico baseado na pilha de contexto
+void diagnose_error_with_stack() {
+    if (error_stack->top < 0) return;
+    
+    ContextFrame* frame = error_stack->contexts[error_stack->top];
+    
+    printf("\n=== DIAGNÓSTICO DE ERRO ===\n");
+    printf("Token atual: %s (linha %d)\n", 
+           token_to_string(current_token.tipo), current_token.linha);
+    
+    // Mostrar hierarquia de contextos
+    printf("Hierarquia de contextos:\n");
+    for (int i = error_stack->top; i >= 0; i--) {
+        ContextFrame* ctx = error_stack->contexts[i];
+        printf("  %d. %s (linha %d)\n", 
+               error_stack->top - i + 1, ctx->context_name, ctx->start_line);
+    }
+    
+    // Sugerir correções baseadas no contexto
+    suggest_corrections_for_context(frame);
+}
+
+
+void suggest_corrections_for_context(ContextFrame* frame) {
+    printf("\nSugestões de correção:\n");
+    
+    switch (frame->context) {
+        case CONTEXT_PROGRAMA:
+            printf("  - Verifique se o programa começa corretamente\n");
+            printf("  - Deve ter estrutura: PROGRAM nome; bloco.\n");
+            break;
+            
+        case CONTEXT_BLOCO:
+            if (current_token.tipo == TOKEN_IDENTIFIER) {
+                printf("  - Talvez você esqueceu de declarar a variável?\n");
+                printf("  - Verifique se não falta um ';' antes desta linha\n");
+            }
+            break;
+            
+        case CONTEXT_DECLARACAO_CONST:
+            printf("  - Formato: CONST nome = valor;\n");
+            printf("  - Valores devem ser números inteiros\n");
+            break;
+            
+        case CONTEXT_DECLARACAO_VAR:
+            printf("  - Formato: VAR nome1, nome2, ...;\n");
+            printf("  - Nomes devem ser identificadores válidos\n");
+            break;
+            
+        case CONTEXT_DECLARACAO_PROC:
+            printf("  - Formato: PROCEDURE nome; bloco;\n");
+            printf("  - Procedimento deve ter BEGIN...END\n");
+            break;
+            
+        case CONTEXT_COMANDO:
+            printf("  - Tokens esperados: ");
+            for (int i = 0; i < frame->followers_count; i++) {
+                printf("%s ", token_to_string(frame->followers[i]));
+            }
+            printf("\n");
+            break;
+            
+        case CONTEXT_COMANDO_COMPOSTO:
+            printf("  - Comandos devem estar entre BEGIN e END\n");
+            printf("  - Separar comandos com ';'\n");
+            break;
+            
+        case CONTEXT_COMANDO_IF:
+            printf("  - Formato: IF condição THEN comando\n");
+            printf("  - Pode ter ELSE comando\n");
+            break;
+            
+        case CONTEXT_COMANDO_WHILE:
+            printf("  - Formato: WHILE condição DO comando\n");
+            break;
+            
+        case CONTEXT_COMANDO_FOR:
+            printf("  - Formato: FOR var := inicio TO fim DO comando\n");
+            break;
+            
+        case CONTEXT_CONDICAO:
+            printf("  - Use operadores: =, <>, <, <=, >, >=\n");
+            printf("  - Formato: expressão operador expressão\n");
+            break;
+            
+        case CONTEXT_EXPRESSAO:
+            printf("  - Verifique se os parênteses estão balanceados\n");
+            printf("  - Operadores devem estar entre operandos\n");
+            break;
+            
+        case CONTEXT_TERMO:
+            printf("  - Use *, / entre fatores\n");
+            break;
+            
+        case CONTEXT_FATOR:
+            printf("  - Deve ser: número, identificador ou (expressão)\n");
+            break;
+    }
 }
 
 // Enhanced comando function with better error detection
 int comando_enhanced() {
-    push_context(CONTEXT_COMANDO);
+    TokenType sync_comando[] = {TOKEN_SEMICOLON, TOKEN_END, TOKEN_ELSE, TOKEN_DOT};
+    push_context_enhanced(CONTEXT_COMANDO, "COMANDO", sync_comando, 4);
     int result = 1;
     
     if (current_token.tipo == TOKEN_IDENTIFIER) {
+        // Verificar se é uma palavra-chave mal digitada
+        if (strcmp(current_token.lexema, "EN") == 0) {
+            syntax_error_with_hint("Token inválido 'EN' - possível erro de digitação", 
+                                 "Verifique se era para ser 'END'");
+            pop_context_enhanced();
+            return 0;
+        }
+        
         eat_advanced(TOKEN_IDENTIFIER, CONTEXT_COMANDO);
         if(!eat_advanced(TOKEN_ASSIGN, CONTEXT_COMANDO)){
             if (current_token.tipo == TOKEN_EQUAL) {
@@ -535,7 +1094,7 @@ int comando_enhanced() {
                                      "Declarações de variáveis devem vir antes dos comandos e começar com 'VAR'");
                 advanced_synchronize();
                 result = 0;
-                pop_context();
+                pop_context_enhanced();
                 return result;
             }
         }
@@ -546,15 +1105,9 @@ int comando_enhanced() {
         eat_advanced(TOKEN_CALL, CONTEXT_COMANDO);
         eat_advanced(TOKEN_IDENTIFIER, CONTEXT_COMANDO);
     } else if (current_token.tipo == TOKEN_BEGIN) {
-        // Check for multiple BEGIN blocks at wrong level
-        if (detect_multiple_begin_blocks()) {
-            if (show_hints) {
-                syntax_error_with_hint("Bloco BEGIN adicional detectado", 
-                                     "Considere usar PROCEDURE para organizar código adicional");
-            }
-        }
-        
-        push_context(CONTEXT_COMANDO_COMPOSTO);
+        // Comando composto - não verificar múltiplos BEGINs aqui, pois é contexto válido
+        TokenType sync_composto[] = {TOKEN_END, TOKEN_SEMICOLON, TOKEN_EOF};
+        push_context_enhanced(CONTEXT_COMANDO_COMPOSTO, "COMANDO_COMPOSTO", sync_composto, 3);
         eat_advanced(TOKEN_BEGIN, CONTEXT_COMANDO_COMPOSTO);
         
         int comandos_processados = 0;
@@ -568,8 +1121,10 @@ int comando_enhanced() {
             eat_advanced(TOKEN_SEMICOLON, CONTEXT_COMANDO_COMPOSTO);
             
             if (current_token.tipo == TOKEN_END) {
-                syntax_error_with_hint("Ponto e vírgula desnecessário antes de 'END'", 
-                                     "Remova o ';' antes de END");
+                // Ponto e vírgula antes de END é permitido mas desnecessário
+                if (show_hints) {
+                    printf("💡 \033[1;33mAviso:\033[0m Ponto e vírgula desnecessário antes de 'END'\n");
+                }
                 break;
             } else if (current_token.tipo == TOKEN_ELSE) {
                 syntax_error_with_hint("Ponto e vírgula inválido antes de 'ELSE'", 
@@ -592,6 +1147,37 @@ int comando_enhanced() {
             }
         }
         
+        // Verificar se há comando sem ';' antes do próximo comando
+        if (current_token.tipo != TOKEN_END && current_token.tipo != TOKEN_SEMICOLON && 
+            current_token.tipo != TOKEN_EOF && current_token.tipo != TOKEN_DOT) {
+            
+            // Verificar se é um identificador (possível próximo comando)
+            if (current_token.tipo == TOKEN_IDENTIFIER) {
+                syntax_error_with_hint("Esperado ';' entre comandos", 
+                                     "Comandos devem ser separados por ponto e vírgula");
+                // Continuar análise assumindo que o ';' foi esquecido
+                if (comando_enhanced()) {
+                    comandos_processados++;
+                }
+                
+                // Após processar comando sem ';', verificar novamente por ';'
+                while (current_token.tipo == TOKEN_SEMICOLON) {
+                    eat_advanced(TOKEN_SEMICOLON, CONTEXT_COMANDO_COMPOSTO);
+                    if (current_token.tipo == TOKEN_END) {
+                        break;
+                    }
+                    if (comando_enhanced()) {
+                        comandos_processados++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Verificar se há comando sem ';' antes do próximo comando
+        
+        
         if (current_token.tipo != TOKEN_END) {
             if (current_token.tipo == TOKEN_EOF) {
                 syntax_error_with_hint("Bloco BEGIN não foi fechado", 
@@ -609,10 +1195,11 @@ int comando_enhanced() {
         }
         
         result = comandos_processados > 0;
-        pop_context();
+        pop_context_enhanced();
 
     } else if (current_token.tipo == TOKEN_IF) {
-        push_context(CONTEXT_COMANDO_IF);
+        TokenType sync_if[] = {TOKEN_THEN, TOKEN_ELSE, TOKEN_SEMICOLON, TOKEN_END};
+        push_context_enhanced(CONTEXT_COMANDO_IF, "COMANDO_IF", sync_if, 4);
         eat_advanced(TOKEN_IF, CONTEXT_COMANDO_IF);
         condicao();
         if (current_token.tipo != TOKEN_THEN) {
@@ -635,9 +1222,10 @@ int comando_enhanced() {
                                      "ELSE deve ter um comando válido");
             }
         }
-        pop_context();
+        pop_context_enhanced();
     } else if (current_token.tipo == TOKEN_WHILE) {
-        push_context(CONTEXT_COMANDO_WHILE);
+        TokenType sync_while[] = {TOKEN_DO, TOKEN_SEMICOLON, TOKEN_END};
+        push_context_enhanced(CONTEXT_COMANDO_WHILE, "COMANDO_WHILE", sync_while, 3);
         eat_advanced(TOKEN_WHILE, CONTEXT_COMANDO_WHILE);
         condicao();
         
@@ -653,9 +1241,10 @@ int comando_enhanced() {
             syntax_error_with_hint("Comando inválido após DO", 
                                  "WHILE deve ter um comando válido após DO");
         }
-        pop_context();
+        pop_context_enhanced();
     } else if (current_token.tipo == TOKEN_FOR) {
-        push_context(CONTEXT_COMANDO_FOR);
+        TokenType sync_for[] = {TOKEN_DO, TOKEN_SEMICOLON, TOKEN_END};
+        push_context_enhanced(CONTEXT_COMANDO_FOR, "COMANDO_FOR", sync_for, 3);
         eat_advanced(TOKEN_FOR, CONTEXT_COMANDO_FOR);
         eat_advanced(TOKEN_IDENTIFIER, CONTEXT_COMANDO_FOR);
         eat_advanced(TOKEN_ASSIGN, CONTEXT_COMANDO_FOR);
@@ -672,10 +1261,11 @@ int comando_enhanced() {
             syntax_error_with_hint("Comando inválido após DO em FOR", 
                                  "FOR deve ter um comando válido após DO");
         }
-        pop_context();
+        pop_context_enhanced();
     } else if (current_token.tipo == TOKEN_END || current_token.tipo == TOKEN_ELSE || 
                current_token.tipo == TOKEN_DOT || current_token.tipo == TOKEN_SEMICOLON) {
-        // comando vazio: epsilon
+        // comando vazio: epsilon - isso é válido
+        result = 1; // Comando vazio é válido em alguns contextos
     } else {
         if (show_hints) {
             const char* dica = NULL;
@@ -699,12 +1289,13 @@ int comando_enhanced() {
         result = 0;
     }
     
-    pop_context();
+    pop_context_enhanced();
     return result;
 }
 
 void condicao() {
-    push_context(CONTEXT_CONDICAO);
+    TokenType sync_condicao[] = {TOKEN_THEN, TOKEN_DO, TOKEN_SEMICOLON};
+    push_context_enhanced(CONTEXT_CONDICAO, "CONDICAO", sync_condicao, 3);
     if (current_token.tipo == TOKEN_IDENTIFIER || current_token.tipo == TOKEN_NUMBER) {
         expressao();
         if (current_token.tipo == TOKEN_EQUAL || current_token.tipo == TOKEN_NE ||
@@ -717,11 +1308,12 @@ void condicao() {
         syntax_error("esperada condição");
         advanced_synchronize();
     }
-    pop_context();
+    pop_context_enhanced();
 }
 
 void expressao() {
-    push_context(CONTEXT_EXPRESSAO);
+    TokenType sync_expressao[] = {TOKEN_SEMICOLON, TOKEN_THEN, TOKEN_DO, TOKEN_RPAREN, TOKEN_COMMA};
+    push_context_enhanced(CONTEXT_EXPRESSAO, "EXPRESSAO", sync_expressao, 5);
     if (current_token.tipo == TOKEN_PLUS || current_token.tipo == TOKEN_MINUS) {
         eat_advanced(current_token.tipo, CONTEXT_EXPRESSAO);
     }
@@ -730,21 +1322,24 @@ void expressao() {
         eat_advanced(current_token.tipo, CONTEXT_EXPRESSAO);
         termo();
     }
-    pop_context();
+    pop_context_enhanced();
 }
 
 void termo() {
-    push_context(CONTEXT_TERMO);
+    TokenType sync_termo[] = {TOKEN_PLUS, TOKEN_MINUS, TOKEN_SEMICOLON, TOKEN_THEN, TOKEN_DO, TOKEN_RPAREN};
+    push_context_enhanced(CONTEXT_TERMO, "TERMO", sync_termo, 6);
     fator();
     while (current_token.tipo == TOKEN_MULT || current_token.tipo == TOKEN_DIV) {
         eat_advanced(current_token.tipo, CONTEXT_TERMO);
         fator();
     }
-    pop_context();
+    pop_context_enhanced();
 }
 
 void fator() {
-    push_context(CONTEXT_FATOR);
+    TokenType sync_fator[] = {TOKEN_MULT, TOKEN_DIV, TOKEN_PLUS, TOKEN_MINUS, TOKEN_SEMICOLON, TOKEN_RPAREN};
+    push_context_enhanced(CONTEXT_FATOR, "FATOR", sync_fator, 6);
+    
     if (current_token.tipo == TOKEN_IDENTIFIER) {
         eat_advanced(TOKEN_IDENTIFIER, CONTEXT_FATOR);
     } else if (current_token.tipo == TOKEN_NUMBER) {
@@ -752,27 +1347,59 @@ void fator() {
     } else if (current_token.tipo == TOKEN_LPAREN) {
         eat_advanced(TOKEN_LPAREN, CONTEXT_FATOR);
         expressao();
-        eat_advanced(TOKEN_RPAREN, CONTEXT_FATOR);
-    } else {
-        if (show_hints) {
-            const char* dica = NULL;
-            if (current_token.tipo == TOKEN_RPAREN) {
-                dica = "Expressão vazia dentro dos parênteses";
-            } else if (current_token.tipo == TOKEN_SEMICOLON) {
-                dica = "Expressão incompleta antes do ';'";
-            }
-            
-            if (dica) {
-                syntax_error_with_hint("Esperado fator (identificador, número ou expressão entre parênteses)", dica);
+        if (current_token.tipo != TOKEN_RPAREN) {
+            syntax_error_with_hint("Esperado ')' para fechar expressão", 
+                                 "Parênteses devem estar balanceados");
+        } else {
+            eat_advanced(TOKEN_RPAREN, CONTEXT_FATOR);
+        }
+    } else if (current_token.tipo == TOKEN_ERROR_LEXICO) {
+        // Tratar erro léxico explicitamente
+        lexico_error("Token inválido encontrado na expressão");
+        advanced_synchronize();        } else {
+            if (show_hints) {
+                const char* dica = NULL;
+                if (current_token.tipo == TOKEN_RPAREN) {
+                    dica = "Expressão vazia dentro dos parênteses";
+                } else if (current_token.tipo == TOKEN_SEMICOLON) {
+                    dica = "Expressão incompleta antes do ';'";
+                } else if (current_token.tipo == TOKEN_END) {
+                    dica = "Expressão incompleta antes do 'END'";
+                } else if (strlen(current_token.lexema) > 0) {
+                    // Verificar erros de digitação comuns
+                    if (strcmp(current_token.lexema, "EN") == 0) {
+                        dica = "Possível erro de digitação: 'EN' deveria ser 'END'";
+                    } else if (strcmp(current_token.lexema, "BEGI") == 0) {
+                        dica = "Possível erro de digitação: 'BEGI' deveria ser 'BEGIN'";
+                    } else if (strcmp(current_token.lexema, "PROCEDUR") == 0) {
+                        dica = "Possível erro de digitação: 'PROCEDUR' deveria ser 'PROCEDURE'";
+                    } else {
+                        // Verificar se contém caracteres inválidos
+                        int has_invalid = 0;
+                        for (int i = 0; current_token.lexema[i]; i++) {
+                            char c = current_token.lexema[i];
+                            if (c == '#' || c == '@' || c == '$' || c == '%' || c == '&' || c == '!') {
+                                has_invalid = 1;
+                                break;
+                            }
+                        }
+                        if (has_invalid) {
+                            dica = "Caractere inválido na expressão";
+                        }
+                    }
+                }
+                
+                if (dica) {
+                    syntax_error_with_hint("Esperado fator (identificador, número ou expressão entre parênteses)", dica);
+                } else {
+                    syntax_error("Esperado fator");
+                }
             } else {
                 syntax_error("Esperado fator");
             }
-        } else {
-            syntax_error("Esperado fator");
+            advanced_synchronize();
         }
-        advanced_synchronize();
-    }
-    pop_context();
+    pop_context_enhanced();
 }
 static int carregar_linha() {
     if (fgets(linha, sizeof(linha), fonte)) {
@@ -789,18 +1416,51 @@ static int carregar_linha() {
 }
 
 void parse() {
+    // Initialize statistics and print banner
+    init_statistics();
+    start_parsing_timer();
+    
+    if (show_hints) {
+        print_banner();
+        printf(BOLD CYAN SYMBOL_GEAR " Iniciando análise..." RESET_COLOR "\n\n");
+    }
+    
     current_token = get_next_token();
     if (current_token.tipo == TOKEN_ERROR_LEXICO) {
         lexico_error("Erro léxico detectado no primeiro token");
     }
+    
+    // Update token statistics
+    update_token_stats(current_token.tipo);
+    
     programa_enhanced();
+    
     if (current_token.tipo != TOKEN_EOF) {
         syntax_error("esperado fim de arquivo");
     }
     
+    // End timing and print results
+    end_parsing_timer();
+    stats.total_lines = linha_num;
+    
+    if (show_hints) {
+        print_detailed_statistics();
+        print_performance_metrics();
+        print_code_quality_metrics();
+    }
+    
     if (num_erros_sintaticos == 0 && num_erros_lexicos == 0) {
-        printf("\033[1;32mAnálise concluída sem erros.\033[0m\n");
+        if (show_hints) {
+            printf("\n");
+            PRINT_SUCCESS("Análise concluída sem erros!");
+            print_summary_box(0, 0, stats.parsing_time);
+        } else {
+            printf("\033[1;32mAnálise concluída sem erros.\033[0m\n");
+        }
     } else {
+        if (show_hints) {
+            print_summary_box(num_erros_sintaticos + num_erros_lexicos, 0, stats.parsing_time);
+        }
         printf("\033[1;33mResumo:\033[0m %d erro(s) sintático(s), %d erro(s) léxico(s)\n",
             num_erros_sintaticos, num_erros_lexicos);
     }
@@ -872,15 +1532,3 @@ Token get_next_token() {
         return erro;
     }
 }
-
-int sincronizar(TokenType sincronizadores[], int n) {
-    while (1) {
-        for (int i = 0; i < n; i++) {
-            if (current_token.tipo == sincronizadores[i] || current_token.tipo == TOKEN_EOF) {
-                return i;  // Token sincronizador encontrado
-            }
-        }
-        current_token = get_next_token();  // Descartar token inválido
-    }
-}
-

@@ -1,5 +1,8 @@
 #include "hash.h"
+#include "utils.h"
 #include <time.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define MAX_STRING_LEN 20
 
@@ -48,7 +51,7 @@ int hash_inserir(TabelaHash *t, string chave, int valor)
     for (unsigned i = 0; i < B; i++) {
         int pos = hash_funcao(x, i, B);
         if (!t->keys[pos]) {
-            t->keys[pos]   = strdup(chave);
+            t->keys[pos]   = string_duplicate(chave);
             t->values[pos] = valor;
             return pos;
         }

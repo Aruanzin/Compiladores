@@ -1,0 +1,23 @@
+CONST x = 10, y = 20;
+VAR a, b, c;
+
+PROCEDURE square;
+BEGIN
+  a := x * x;
+END;
+
+PROCEDURE sum;
+BEGIN
+  b := x + y;
+END;
+
+PROCEDURE mult;
+BEGIN
+  b := x * y;
+END;
+
+BEGIN
+  CALL square;
+  CALL sum;
+  c := a + b;
+END.

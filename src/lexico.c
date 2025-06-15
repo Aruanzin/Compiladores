@@ -409,8 +409,7 @@ void lexico(const char* linha, int num_linha){
         strcpy(error.lexema, caracter); // Store the problematic character
         
         // Usar a função de relatório de erro apropriada
-        LexErrorType error_type = classify_lex_error(caracter[0], caracter, 0);
-        report_lexical_error(caracter, num_linha, pointer, linha, error_type);
+        report_lexical_error(caracter, num_linha, pointer, linha, LEX_ERROR_INVALID_CHAR);
         num_erros_lexicos++;  // Increment error counter
         
         addToken(error);
@@ -519,6 +518,11 @@ void report_lexical_error(const char* problematic_text, int line, int position, 
                 printf("💡 \033[1;33mDica:\033[0m Identificadores devem conter apenas letras e números\n");
                 printf("📖 \033[1;36mExemplo:\033[0m 'valor1' ✓, 'val@r' ✗, 'var#2' ✗\n");
                 break;
+            case LEX_ERROR_INVALID_CHAR:
+                printf("❌ \033[1;31mErro:\033[0m Caractere inválido '%s'\n", problematic_text);
+                printf("💡 \033[1;33mDica:\033[0m Use apenas caracteres alfanuméricos e símbolos válidos\n");
+                printf("📖 \033[1;36mCaracteres válidos:\033[0m a-z, A-Z, 0-9, +, -, *, /, =, <, >, (, ), {, }, ;, :, ., ,\n");
+                break;
                 
             default:
                 printf("❌ \033[1;31mErro:\033[0m Caractere inválido '%s'\n", problematic_text);
@@ -576,6 +580,7 @@ void report_lexical_error(const char* problematic_text, int line, int position, 
             case LEX_ERROR_IDENTIFIER_INVALID_CHAR:
                 error_msg = "caractere inválido em identificador";
                 break;
+            case LEX_ERROR_INVALID_CHAR:
             default:
                 error_msg = "caractere inválido";
                 break;

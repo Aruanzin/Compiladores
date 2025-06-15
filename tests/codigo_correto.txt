@@ -1,0 +1,21 @@
+CONST max = 100;
+VAR x, y, resultado;
+
+PROCEDURE soma;
+BEGIN
+  resultado := x + y
+END;
+
+BEGIN
+  x := 10;
+  y := 20;
+  CALL soma;
+  IF resultado > max THEN
+    resultado := max
+  ELSE
+    resultado := resultado + 1
+  END;
+  WHILE x > 0 DO
+    x := x - 1
+  END
+END.

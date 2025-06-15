@@ -27,6 +27,7 @@ typedef struct {
     TokenType tipo;
     char lexema[100];
     int linha;
+    int coluna;
     int status;
 } Token;
 

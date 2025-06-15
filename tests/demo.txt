@@ -1,0 +1,45 @@
+CONST pi = 3, e = 2, golden = 1;
+VAR radius, area, volume, result;
+
+PROCEDURE calculateArea;
+BEGIN
+  area := pi * radius * radius;
+END;
+
+PROCEDURE calculateVolume;
+BEGIN
+  volume := pi * radius * radius * radius * 4;
+  volume := volume / 3;
+END;
+
+PROCEDURE fibonacci;
+VAR a, b, temp, n;
+BEGIN
+  a := 0;
+  b := 1;
+  n := 10;
+  WHILE n > 0 DO
+    BEGIN
+      temp := a + b;
+      a := b;
+      b := temp;
+      n := n - 1;
+    END;
+  result := b;
+END;
+
+BEGIN
+  radius := 5;
+  CALL calculateArea;
+  CALL calculateVolume;
+  CALL fibonacci;
+  
+  IF area > volume THEN
+    result := area
+  ELSE
+    result := volume;
+    
+  WHILE result > 100 DO
+    result := result / 2;
+    
+END.
